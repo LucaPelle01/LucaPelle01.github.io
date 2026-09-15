@@ -15,7 +15,7 @@
     --ink-dim: rgba(255,255,255,0.70);
     --ink-faint: rgba(255,255,255,0.45);
     --bright: #4dc9ff;
-    --acid: #aedd00;
+    --acid: #ff8c8c;
     --band: rgba(77,201,255,0.16);
     --mean: rgba(77,201,255,0.65);
   }
@@ -66,14 +66,37 @@
   }
 
   #curve-svg{
-    position: absolute;
+    position: fixed;
     top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
     pointer-events: none;
     z-index: 1;
     opacity: 0;
     transition: opacity 1.1s ease;
   }
   #curve-svg.ready{ opacity: 1; }
+
+  #sample-path{ transition: filter 0.45s ease; }
+  #sample-path.traveling{
+    filter: drop-shadow(0 0 10px var(--acid)) drop-shadow(0 0 26px rgba(255,140,140,0.55));
+  }
+
+  .glow{
+    position: fixed;
+    left: 50%;
+    top: 0;
+    width: 60vmax;
+    height: 60vmax;
+    margin-left: -30vmax;
+    margin-top: -30vmax;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,140,140,0.20), rgba(77,201,255,0.08) 55%, transparent 75%);
+    filter: blur(20px);
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
 
   #mean-path{ stroke: var(--mean); stroke-width: 2; stroke-dasharray: 2 9; fill: none; stroke-linecap: round; }
 
@@ -164,36 +187,6 @@
     font-size: clamp(1rem, 1.6vw, 1.25rem);
     color: var(--ink-dim);
     margin: 0 0 1.4em;
-  }
-
-  .legend{
-    display: flex;
-    flex-direction: column;
-    gap: 0.35em;
-    margin-bottom: 1em;
-  }
-  .legend span{
-    display: flex;
-    align-items: center;
-    gap: 0.55em;
-    font-weight: 600;
-    font-size: 0.88rem;
-    color: var(--ink-faint);
-  }
-  .legend .sw{
-    display: inline-block;
-    width: 22px;
-    height: 0;
-    border-top: 2px solid var(--mean);
-  }
-  .legend .sw.sw-band{
-    height: 10px;
-    border-top: none;
-    background: var(--band);
-    border-radius: 2px;
-  }
-  .legend .sw.sw-sample{
-    border-top: 3px solid var(--acid);
   }
 
   .formula{
@@ -287,24 +280,21 @@
 <body>
 
 <div class="vignette"></div>
+<div class="glow" id="glow"></div>
+<svg id="curve-svg" xmlns="http://www.w3.org/2000/svg">
+  <g id="curve-group">
+    <path id="band-path" fill="var(--band)"></path>
+    <path id="mean-path"></path>
+    <path id="sample-path" fill="none" stroke="var(--acid)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>
+    <g id="dots"></g>
+  </g>
+</svg>
 
 <div class="viewport" id="viewport">
   <div class="track" id="track">
 
-    <svg id="curve-svg" xmlns="http://www.w3.org/2000/svg">
-      <path id="band-path" fill="var(--band)"></path>
-      <path id="mean-path"></path>
-      <path id="sample-path" fill="none" stroke="var(--acid)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>
-      <g id="dots"></g>
-    </svg>
-
     <header class="slide hero text-bottom" id="hero">
       <div class="slide-inner">
-        <div class="legend">
-          <span><i class="sw sw-mean"></i> posterior mean</span>
-          <span><i class="sw sw-band"></i> 95% credible interval</span>
-          <span><i class="sw sw-sample"></i> sample draw — a new one each visit</span>
-        </div>
         <h1>Luca Pellegrini</h1>
         <p class="role">MSc in Artificial Intelligence — Politecnico di Milano</p>
         <p class="tagline">i live and learn.</p>
@@ -421,16 +411,31 @@
     for (var i=0;i<n;i++){ A[i] = new Array(m).fill(0); }
     return A;
   }
-  function rbf(x1, x2, l, sigmaF){
-    var d = x1 - x2;
-    return sigmaF*sigmaF*Math.exp(-(d*d)/(2*l*l));
-  }
-  function kernelMatrix(X1, X2, l, sigmaF){
+  function kernelMatrix(X1, X2, kfn){
     var K = zeros(X1.length, X2.length);
     for (var i=0;i<X1.length;i++){
-      for (var j=0;j<X2.length;j++){ K[i][j] = rbf(X1[i], X2[j], l, sigmaF); }
+      for (var j=0;j<X2.length;j++){ K[i][j] = kfn(X1[i], X2[j]); }
     }
     return K;
+  }
+  // A sum of RBF components at different scales is still a valid (PSD) kernel,
+  // but produces much richer, non-linear sample paths than a single RBF —
+  // a broad component sets the overall trend, finer components add texture.
+  // Lengthscales and variances are re-drawn at random on every page load.
+  function makeRandomMixtureKernel(){
+    var comps = [
+      { l: 1.5 + Math.random()*1.3, v: 0.5  + Math.random()*0.35 },  // broad trend
+      { l: 0.55 + Math.random()*0.7, v: 0.15 + Math.random()*0.25 }, // mid detail
+      { l: 0.18 + Math.random()*0.27, v: 0.04 + Math.random()*0.11 } // fine texture
+    ];
+    return function(x1, x2){
+      var d = x1 - x2, sum = 0;
+      for (var c=0; c<comps.length; c++){
+        var l = comps[c].l;
+        sum += comps[c].v * Math.exp(-(d*d)/(2*l*l));
+      }
+      return sum;
+    };
   }
   function matMul(A, B){
     var n = A.length, k = B.length, m = B[0].length;
@@ -500,14 +505,14 @@
     return v;
   }
 
-  function gaussianProcess(Xtrain, Ytrain, Xgrid, l, sigmaF, noise){
+  function gaussianProcess(Xtrain, Ytrain, Xgrid, kfn, noise){
     var n = Xtrain.length;
-    var K = kernelMatrix(Xtrain, Xtrain, l, sigmaF);
+    var K = kernelMatrix(Xtrain, Xtrain, kfn);
     for (var i=0;i<n;i++){ K[i][i] += noise; }
     var Kinv = invert(K);
 
-    var Ks  = kernelMatrix(Xtrain, Xgrid, l, sigmaF);
-    var Kss = kernelMatrix(Xgrid, Xgrid, l, sigmaF);
+    var Ks  = kernelMatrix(Xtrain, Xgrid, kfn);
+    var Kss = kernelMatrix(Xgrid, Xgrid, kfn);
     var KsT = transpose(Ks);
 
     var Yt = Ytrain.map(function(y){ return [y]; });
@@ -568,6 +573,7 @@
   var track = document.getElementById('track');
   var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
   var svg = document.getElementById('curve-svg');
+  var curveGroup = document.getElementById('curve-group');
   var bandPath = document.getElementById('band-path');
   var meanPath = document.getElementById('mean-path');
   var samplePath = document.getElementById('sample-path');
@@ -575,12 +581,37 @@
 
   var Xtrain = [1,2,3,4,5,6,7,8];
   var Ytrain = [0.2,-0.8,0.6,-0.3,0.9,-0.6,0.4,-0.2];
+  var ZOOM = 0.38; // < 1 = zoomed out: several points' worth of curve visible at once
 
   var svgNS = 'http://www.w3.org/2000/svg';
   var currentIndex = 0;
   var isAnimating = false;
   var totalLen = 0;
   var dotEls = [];
+  var gpX = null, gpResult = null, gpScale = 1;
+  var samplePxY = [];
+
+  // Draw the random function once per page load: pick fresh, random
+  // lengthscales/variances for the kernel mixture, then sample a posterior
+  // draw. Resizing the window only re-projects this same function to
+  // pixels — it never reshuffles mid-visit.
+  function initGP(){
+    var kfn = makeRandomMixtureKernel();
+    gpX = linspace(-0.35, slides.length - 0.65, 280);
+    gpResult = gaussianProcess(Xtrain, Ytrain, gpX, kfn, 1e-5);
+
+    // Auto-fit: measure how far mean/band/sample actually wander across the
+    // "core" span that holds the timeline points, so wilder random draws
+    // (bigger variance, shorter lengthscales) still land nicely on screen.
+    var coreMax = 0.6;
+    for (var i=0;i<gpX.length;i++){
+      var x = gpX[i];
+      if (x < Xtrain[0]-0.5 || x > Xtrain[Xtrain.length-1]+0.5) continue;
+      var std = Math.sqrt(gpResult.variance[i]);
+      coreMax = Math.max(coreMax, Math.abs(gpResult.mu[i]) + 1.96*std, Math.abs(gpResult.sample[i]));
+    }
+    gpScale = coreMax;
+  }
 
   function layout(){
     var w = window.innerWidth;
@@ -588,29 +619,28 @@
     var totalW = slides.length * w;
 
     track.style.width = totalW + 'px';
-    svg.setAttribute('viewBox', '0 0 ' + totalW + ' ' + h);
-    svg.setAttribute('width', totalW);
+    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    svg.setAttribute('width', w);
     svg.setAttribute('height', h);
 
-    var centerY = h * 0.44;
-    var amplitude = h * 0.24;
-
-    var Xgrid = linspace(-0.35, slides.length - 0.65, 260);
-    var gp = gaussianProcess(Xtrain, Ytrain, Xgrid, 1.15, 1.0, 1e-5);
+    var centerY = h * 0.46;
+    var amplitude = (h * 0.40) / gpScale;
 
     var upperPts = [], lowerPts = [], samplePts = [], meanPts = [];
-    for (var i=0;i<Xgrid.length;i++){
-      var x = Xgrid[i];
-      var px = (x + 0.5) * w;
-      var std = Math.sqrt(gp.variance[i]);
-      var upperY = centerY - (gp.mu[i] + 1.96*std) * amplitude;
-      var lowerY = centerY - (gp.mu[i] - 1.96*std) * amplitude;
-      var sampY  = centerY - gp.sample[i] * amplitude;
-      var meanY  = centerY - gp.mu[i] * amplitude;
+    samplePxY = [];
+    for (var i=0;i<gpX.length;i++){
+      var x = gpX[i];
+      var px = x * w * ZOOM;
+      var std = Math.sqrt(gpResult.variance[i]);
+      var upperY = centerY - (gpResult.mu[i] + 1.96*std) * amplitude;
+      var lowerY = centerY - (gpResult.mu[i] - 1.96*std) * amplitude;
+      var sampY  = centerY - gpResult.sample[i] * amplitude;
+      var meanY  = centerY - gpResult.mu[i] * amplitude;
       upperPts.push([px, upperY]);
       lowerPts.push([px, lowerY]);
       samplePts.push([px, sampY]);
       meanPts.push([px, meanY]);
+      samplePxY.push(sampY);
     }
 
     var bandD = smoothPath(upperPts) + ' ' +
@@ -622,7 +652,7 @@
     dotsGroup.innerHTML = '';
     dotEls = [];
     Xtrain.forEach(function(x, idx){
-      var px = (x + 0.5) * w;
+      var px = x * w * ZOOM;
       var py = centerY - Ytrain[idx]*amplitude;
 
       var ring = document.createElementNS(svgNS, 'circle');
@@ -654,6 +684,19 @@
   var slideInners = slides.map(function(s){ return s.querySelector('.slide-inner'); });
   var heroHint = document.getElementById('heroHint');
   var heroHintHidden = false;
+  var glowEl = document.getElementById('glow');
+
+  // Interpolate the sample curve's pixel-Y at an arbitrary continuous x
+  // (same units as gpX), used to keep the ambient glow riding the curve.
+  function sampleYAt(x){
+    var n = gpX.length;
+    var t = (x - gpX[0]) / (gpX[n-1] - gpX[0]);
+    t = Math.max(0, Math.min(1, t));
+    var idx = t * (n - 1);
+    var i0 = Math.floor(idx), i1 = Math.min(i0 + 1, n - 1);
+    var frac = idx - i0;
+    return samplePxY[i0] + (samplePxY[i1] - samplePxY[i0]) * frac;
+  }
 
   function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2; }
 
@@ -676,11 +719,16 @@
     index = Math.max(0, Math.min(slides.length - 1, index));
     currentIndex = index;
     isAnimating = true;
+    samplePath.classList.add('traveling');
+    function finish(){
+      isAnimating = false;
+      samplePath.classList.remove('traveling');
+    }
     if (reduceMotion){
       viewport.scrollLeft = index * window.innerWidth;
-      isAnimating = false;
+      finish();
     } else {
-      animateScrollTo(index * window.innerWidth, 760, function(){ isAnimating = false; });
+      animateScrollTo(index * window.innerWidth, 820, finish);
     }
   }
 
@@ -696,9 +744,30 @@
         inner.style.opacity = 0;
       } else {
         inner.style.opacity = Math.max(0, 1 - absD * 1.2);
-        inner.style.transform = reduceMotion ? 'none' : 'translateY(' + (delta * 34) + 'px)';
+        if (reduceMotion){
+          inner.style.transform = 'none';
+        } else {
+          var scaleVal = 1 - Math.min(absD, 1) * 0.07;
+          var driftX = -delta * 16;
+          var driftY = delta * 34;
+          inner.style.transform = 'translate(' + driftX + 'px,' + driftY + 'px) scale(' + scaleVal + ')';
+        }
       }
     });
+
+    if (glowEl && gpX){
+      var glowY = sampleYAt(progress);
+      glowEl.style.transform = 'translateY(' + glowY + 'px)';
+    }
+
+    if (curveGroup){
+      var w = window.innerWidth;
+      var offsetX = w/2 - progress*w*ZOOM;
+      curveGroup.setAttribute('transform', 'translate(' + offsetX + ',0)');
+      var curveOpacity = Math.max(0, Math.min(1, (progress - 0.12) / 0.45));
+      curveGroup.style.opacity = curveOpacity;
+      if (glowEl) glowEl.style.opacity = curveOpacity;
+    }
 
     var nearest = Math.round(progress);
     dotEls.forEach(function(d){
@@ -771,6 +840,7 @@
   }
 
   window.addEventListener('load', function(){
+    initGP();
     layout();
     primeReveal();
     updateContinuous();
