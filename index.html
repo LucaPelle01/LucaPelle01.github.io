@@ -3,21 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Luca Pellegrini</title>
-<meta name="description" content="Luca Pellegrini — MSc student in Artificial Intelligence, Politecnico di Milano.">
+<title>Luca Pellegrini — MSc in Artificial Intelligence</title>
+<meta name="description" content="Luca Pellegrini — MSc student in Artificial Intelligence at Politecnico di Milano. Portfolio rendered as a Gaussian process regression.">
+<meta property="og:title" content="Luca Pellegrini">
+<meta property="og:description" content="MSc in Artificial Intelligence, Politecnico di Milano. A portfolio drawn as a Gaussian process.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23102c53'/%3E%3Cpath d='M4 22 C10 22 10 10 16 10 C22 10 22 20 28 20' stroke='%23ff8c8c' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg: #102c53;
+    --bg-deep: #0b1f3d;
+    --panel: rgba(9,28,56,0.82);
     --ink: #ffffff;
     --ink-dim: rgba(255,255,255,0.70);
     --ink-faint: rgba(255,255,255,0.45);
+    --line: rgba(255,255,255,0.16);
     --bright: #4dc9ff;
     --acid: #ff8c8c;
-    --band: rgba(77,201,255,0.16);
-    --mean: rgba(77,201,255,0.65);
+    --band: rgba(77,201,255,0.15);
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
   *{ box-sizing: border-box; }
@@ -30,379 +37,426 @@
     font-family: 'Manrope', sans-serif;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
   }
 
-  h1, h2, h3{
-    font-family: 'Manrope', sans-serif;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    line-height: 1.02;
-    margin: 0 0 0.3em;
-    color: var(--ink);
-  }
-
+  h1, h2, h3{ font-weight: 800; letter-spacing: -0.02em; line-height: 1.04; margin: 0 0 0.3em; }
   p{ margin: 0 0 0.6em; }
-
   a{ color: inherit; }
+  button{ font-family: 'Manrope', sans-serif; color: inherit; }
 
-  button{ font-family: 'Manrope', sans-serif; }
+  /* ===================== stage ===================== */
 
-  /* ---------- paging viewport ---------- */
-
-  .viewport{
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    position: relative;
-  }
-  .viewport::-webkit-scrollbar{ display: none; }
-
-  .track{
-    display: flex;
-    height: 100vh;
-    height: 100dvh;
-    position: relative;
-  }
-
-  .slide{
-    flex: 0 0 100vw;
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    scroll-snap-align: start;
-    position: relative;
-    padding: 7vh 7vw;
-    display: flex;
-    flex-direction: column;
-  }
-  .slide.text-bottom{ justify-content: flex-end; }
-  .slide.text-center{ justify-content: center; }
-
-  .slide-inner{
-    position: relative;
-    z-index: 2;
-    max-width: 660px;
-    will-change: transform, opacity;
-  }
-
-  /* ---------- curve (always-on background) ---------- */
+  #stage{ position: fixed; inset: 0; z-index: 1; cursor: grab; touch-action: none; }
+  #stage.dragging{ cursor: grabbing; }
 
   #curve-svg{
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw;
-    height: 100vh;
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
     pointer-events: none;
-    z-index: 1;
     opacity: 0;
     transition: opacity 1.1s ease;
   }
   #curve-svg.ready{ opacity: 1; }
 
-  #sample-path{ transition: filter 0.45s ease; }
-  #sample-path.traveling{
-    filter: drop-shadow(0 0 10px var(--acid)) drop-shadow(0 0 26px rgba(255,140,140,0.55));
+  #band-path{ fill: var(--band); }
+  #zero-line{ stroke: rgba(255,255,255,0.13); stroke-width: 1; stroke-dasharray: 1 7; }
+  #mean-path{
+    fill: none; stroke: var(--acid); stroke-width: 3.5;
+    stroke-linecap: round; stroke-linejoin: round;
+    filter: drop-shadow(0 0 9px rgba(255,140,140,0.42));
   }
-
-  #mean-path{ stroke: var(--mean); stroke-width: 2; stroke-dasharray: 2 9; fill: none; stroke-linecap: round; }
-
+  .sample-path{ fill: none; stroke: rgba(77,201,255,0.55); stroke-width: 1.3; opacity: 0.38; }
+  .leader{ stroke: var(--acid); stroke-width: 1.4; opacity: 0.4; stroke-dasharray: 3 4; }
   .dot{
-    fill: var(--bg);
-    stroke: var(--acid);
-    stroke-width: 3px;
+    fill: var(--bg); stroke: var(--acid); stroke-width: 3px;
     filter: drop-shadow(0 0 8px var(--acid));
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: idle-pulse 3.4s ease-in-out infinite;
+    transform-box: fill-box; transform-origin: center;
+    transition: transform 0.28s cubic-bezier(.2,.8,.2,1);
   }
-  @keyframes idle-pulse{
-    0%, 100%{ transform: scale(1); opacity: 0.92; }
-    50%{ transform: scale(1.12); opacity: 1; }
-  }
+  .dot.hot{ transform: scale(1.65); }
 
-  .vignette{
-    position: fixed;
-    inset: 0;
-    z-index: 4;
-    pointer-events: none;
-    background: radial-gradient(ellipse at center, transparent 42%, rgba(4,10,24,0.55) 100%);
-  }
+  /* ===================== title chips ===================== */
 
-  /* ---------- floating titles, anchored to each point ---------- */
-
-  #titles-layer{
-    position: fixed;
-    inset: 0;
-    z-index: 3;
-    pointer-events: none;
-  }
+  #titles-layer{ position: fixed; inset: 0; z-index: 3; pointer-events: none; }
 
   .title-chip{
-    position: fixed;
-    top: 0; left: 0;
+    position: fixed; top: 0; left: 0;
     pointer-events: auto;
-    background: rgba(16,44,83,0.82);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: rgba(12,34,66,0.88);
+    backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px);
     border: 1.5px solid var(--acid);
-    color: var(--ink);
-    font-weight: 700;
-    font-size: 0.95rem;
-    padding: 0.55em 1.1em;
-    border-radius: 999px;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    font-weight: 700; font-size: 1.12rem; letter-spacing: -0.01em;
+    padding: 0.8em 1.45em;
+    border-radius: 14px;
+    white-space: nowrap; cursor: pointer;
+    box-shadow: 0 12px 34px rgba(3,12,28,0.5);
+    transition: background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
   }
-  .title-chip:hover{ background: rgba(16,44,83,0.96); border-color: var(--bright); }
-  .title-chip:focus-visible{ outline: 2px solid var(--bright); outline-offset: 2px; }
+  .title-chip .cue{
+    display: block; font-family: var(--mono);
+    font-weight: 400; font-size: 0.66rem;
+    color: var(--ink-faint); margin-top: 0.4em;
+    letter-spacing: 0.04em;
+  }
+  .title-chip:hover{ background: rgba(20,54,102,0.97); border-color: var(--bright); box-shadow: 0 16px 42px rgba(3,12,28,0.62); }
+  .title-chip:hover .cue{ color: var(--bright); }
+  .title-chip:focus-visible{ outline: 2px solid var(--bright); outline-offset: 3px; }
 
-  /* ---------- point-entry transition ---------- */
+  /* ===================== hero ===================== */
+
+  #hero{
+    position: fixed; inset: 0; z-index: 2;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 8vh 7vw; pointer-events: none;
+  }
+  #hero .inner{ max-width: 900px; pointer-events: auto; }
+  #hero .name{
+    font-weight: 800;
+    font-size: clamp(1.6rem, 3vw, 2.5rem);
+    margin: 0 0 0.15em;
+  }
+  #hero .role{
+    font-weight: 600; font-size: clamp(0.95rem, 1.5vw, 1.15rem);
+    color: var(--bright); margin: 0 0 1.1em;
+  }
+  #typed{
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: clamp(2.2rem, 8.2vw, 6.4rem);
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin: 0 0 0.6em;
+    min-height: 1.1em;
+  }
+  #typed .caret{
+    display: inline-block;
+    width: 0.56ch; height: 0.92em;
+    background: var(--acid);
+    margin-left: 0.09em;
+    vertical-align: -0.09em;
+    animation: blink 1.05s steps(1) infinite;
+  }
+  @keyframes blink{ 0%,49%{opacity:1;} 50%,100%{opacity:0;} }
+
+  .hero-hint{
+    display: flex; align-items: center; gap: 0.55em;
+    font-family: var(--mono); font-size: 0.78rem;
+    color: var(--ink-faint); opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  .hero-hint.on{ opacity: 1; }
+  .hero-hint .chevron{ display: inline-block; animation: nudge 1.6s ease-in-out infinite; }
+  @keyframes nudge{ 0%,100%{ transform: translateX(0); } 50%{ transform: translateX(7px); } }
+
+  /* ===================== outro (opaque, hides the plot) ===================== */
+
+  #outro{
+    position: fixed; inset: 0; z-index: 5;
+    background: var(--bg);
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 8vh 7vw;
+    opacity: 0; pointer-events: none;
+  }
+  #outro .inner{ max-width: 640px; }
+  #outro h2{ font-size: clamp(2.1rem, 5.2vw, 3.6rem); }
+  #outro .open-note{
+    font-family: var(--mono); font-size: 0.78rem;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--acid); margin-bottom: 1.1em;
+    display: flex; align-items: center; gap: 0.6em;
+  }
+  #outro .open-note .pip{
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--acid); animation: livepip 2.2s ease-in-out infinite;
+  }
+  @keyframes livepip{ 0%,100%{ opacity: 1; transform: scale(1);} 50%{ opacity: 0.35; transform: scale(0.82);} }
+  #outro p{ font-weight: 500; font-size: clamp(1.02rem, 1.6vw, 1.25rem); color: var(--ink-dim); max-width: 48ch; }
+  #outro .links{ display: flex; flex-direction: column; gap: 0.45em; margin: 1.3em 0 1.4em; }
+  #outro .links a{
+    font-weight: 800; font-size: clamp(1.2rem, 2.3vw, 1.7rem);
+    text-decoration: none; color: var(--acid); width: fit-content;
+    transition: color 0.18s ease, transform 0.18s ease;
+  }
+  #outro .links a:hover{ color: var(--bright); transform: translateX(5px); }
+  #outro .footnote{ font-size: 0.92rem; color: var(--ink-faint); max-width: 48ch; }
+
+  /* ===================== hamburger + right drawer ===================== */
+
+  #menu-btn{
+    position: fixed; top: 20px; right: 20px; z-index: 14;
+    width: 50px; height: 50px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 5px;
+    background: var(--panel);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1.5px solid var(--line); border-radius: 12px;
+    cursor: pointer; transition: border-color 0.2s ease;
+  }
+  #menu-btn:hover{ border-color: var(--acid); }
+  #menu-btn span{
+    display: block; width: 20px; height: 2px; border-radius: 2px;
+    background: var(--ink);
+    transition: transform 0.34s cubic-bezier(.2,.8,.2,1), opacity 0.2s ease;
+  }
+  body.menu-open #menu-btn span:nth-child(1){ transform: translateY(7px) rotate(45deg); }
+  body.menu-open #menu-btn span:nth-child(2){ opacity: 0; }
+  body.menu-open #menu-btn span:nth-child(3){ transform: translateY(-7px) rotate(-45deg); }
+
+  #scrim{
+    position: fixed; inset: 0; z-index: 12;
+    background: rgba(5,14,30,0.55);
+    backdrop-filter: blur(2px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  body.menu-open #scrim{ opacity: 1; pointer-events: auto; }
+
+  #drawer{
+    position: fixed; top: 0; right: 0; z-index: 13;
+    height: 100%; width: min(348px, 86vw);
+    background: var(--bg-deep);
+    border-left: 1.5px solid var(--line);
+    padding: 104px 26px 32px;
+    transform: translateX(100%);
+    transition: transform 0.52s cubic-bezier(.16,.84,.32,1);
+    overflow-y: auto;
+    box-shadow: -24px 0 60px rgba(3,10,24,0.5);
+  }
+  body.menu-open #drawer{ transform: none; }
+
+  #drawer .drawer-title{
+    font-family: var(--mono); font-size: 0.7rem;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 14px;
+  }
+  #drawer button{
+    display: flex; align-items: baseline; gap: 0.85em;
+    width: 100%; text-align: left;
+    background: none; border: none; border-radius: 10px;
+    padding: 0.72em 0.7em; cursor: pointer;
+    font-weight: 700; font-size: 1rem;
+    border-left: 2px solid transparent;
+    transition: background 0.18s ease, border-color 0.18s ease, padding-left 0.18s ease;
+  }
+  #drawer button:hover{ background: rgba(255,255,255,0.07); padding-left: 1em; }
+  #drawer button .idx{ font-family: var(--mono); font-size: 0.72rem; color: var(--ink-faint); }
+  #drawer button.current{ color: var(--acid); border-left-color: var(--acid); background: rgba(255,140,140,0.07); }
+  #drawer button.current .idx{ color: var(--acid); }
+
+  /* ===================== kernel panel (bottom-right) ===================== */
+
+  #kernel-panel{
+    position: fixed; right: 20px; bottom: 20px; z-index: 6;
+    display: flex; align-items: center; gap: 18px;
+    background: var(--panel);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1.5px solid var(--line); border-radius: 16px;
+    padding: 15px 17px;
+    box-shadow: 0 18px 46px rgba(3,10,24,0.5);
+    transition: opacity 0.35s ease;
+  }
+  #kernel-controls{ width: 156px; }
+  #kernel-controls .ktitle{
+    font-size: 0.72rem; font-weight: 800;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  #kernel-controls .keq{
+    font-family: var(--mono); font-size: 0.6rem;
+    color: var(--ink-faint); margin-bottom: 13px; line-height: 1.4;
+  }
+  .slider-row + .slider-row{ margin-top: 13px; }
+  .slider-row label{
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 0.73rem; font-weight: 700; color: var(--ink-dim);
+    margin-bottom: 5px;
+  }
+  .slider-row label .val{ font-family: var(--mono); font-size: 0.72rem; color: var(--acid); }
+  .slider-row input[type=range]{
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 3px; border-radius: 3px;
+    background: rgba(255,255,255,0.22); outline: none; cursor: pointer;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--acid); border: none; cursor: pointer;
+  }
+  .slider-row input[type=range]::-moz-range-thumb{
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--acid); border: none; cursor: pointer;
+  }
+  #kernel-matrix{ display: block; width: 152px; height: 152px; border-radius: 6px; }
+
+  /* ===================== progress ===================== */
+
+  #progress{
+    position: fixed; left: 0; bottom: 0; z-index: 6;
+    height: 2px; background: var(--acid);
+    width: 0; opacity: 0.65; pointer-events: none;
+  }
+
+  /* ===================== portal + detail page ===================== */
 
   #portal{
-    position: fixed;
-    border-radius: 50%;
-    background: var(--acid);
-    transform: translate(-50%, -50%);
-    z-index: 5;
-    pointer-events: none;
-    display: none;
+    position: fixed; top: 0; left: 0;
+    width: 36px; height: 36px; margin: -18px 0 0 -18px;
+    border-radius: 50%; background: var(--acid);
+    z-index: 15; pointer-events: none; display: none;
+    transform: scale(0); will-change: transform;
   }
   #portal.open{ display: block; }
 
   #detail-overlay{
-    position: fixed;
-    inset: 0;
-    z-index: 6;
+    position: fixed; inset: 0; z-index: 16;
     background: var(--bg);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.4s ease;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.36s ease;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
   #detail-overlay.visible{ opacity: 1; pointer-events: auto; }
 
-  .detail-content{
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 12vh 7vw 12vh;
+  .detail-content{ max-width: 720px; margin: 0 auto; padding: 13vh 7vw 12vh; }
+  .detail-content > *{ opacity: 0; transform: translateY(18px); }
+  #detail-overlay.visible .detail-content > *{
+    animation: riseIn 0.62s cubic-bezier(.2,.8,.2,1) forwards;
   }
-  .detail-content h2{ font-size: clamp(2.1rem, 5vw, 3.4rem); }
-  .detail-content p{
-    font-weight: 500;
-    font-size: clamp(1.05rem, 1.7vw, 1.3rem);
-    line-height: 1.6;
-    color: var(--ink-dim);
-    max-width: 62ch;
-  }
+  @keyframes riseIn{ to{ opacity: 1; transform: none; } }
 
-  .detail-image{
-    width: 100%;
-    aspect-ratio: 16 / 7;
-    border-radius: 16px;
-    margin-bottom: 1.7em;
-    background: linear-gradient(135deg, var(--acid), var(--bright));
+  .detail-figure{ width: 100%; aspect-ratio: 16/7; border-radius: 18px; margin-bottom: 2em; border: 1px solid var(--line); }
+  .detail-kicker{
+    font-family: var(--mono); font-size: 0.72rem;
+    letter-spacing: 0.13em; text-transform: uppercase;
+    color: var(--acid); margin-bottom: 0.8em;
   }
+  .detail-content h2{ font-size: clamp(2.1rem, 5vw, 3.4rem); margin-bottom: 0.55em; }
+  .detail-content p{
+    font-weight: 500; font-size: clamp(1.04rem, 1.6vw, 1.26rem);
+    line-height: 1.62; color: var(--ink-dim); max-width: 62ch;
+  }
+  .detail-content ul{ padding-left: 1.2em; margin: 0 0 1.1em; }
+  .detail-content li{
+    font-weight: 500; font-size: clamp(1rem, 1.5vw, 1.16rem);
+    line-height: 1.6; color: var(--ink-dim);
+    margin-bottom: 0.5em; max-width: 60ch;
+  }
+  .detail-content li::marker{ color: var(--acid); }
+  .entry + .entry{ margin-top: 1.4em; }
+  .entry .meta{ display: block; font-family: var(--mono); font-size: 0.78rem; color: var(--bright); margin-bottom: 0.25em; }
+  .entry h3{ font-weight: 700; font-size: clamp(1.14rem, 2vw, 1.45rem); margin: 0 0 0.18em; }
+  .skills-grid{ margin: 0; }
+  .skills-grid dt{ font-weight: 700; font-size: 0.9rem; color: var(--bright); margin-top: 1.2em; }
+  .skills-grid dt:first-child{ margin-top: 0; }
+  .skills-grid dd{ margin: 0.22em 0 0; font-weight: 600; font-size: clamp(1.04rem, 1.6vw, 1.24rem); color: var(--ink-dim); }
+  a.link{
+    display: inline-block; color: var(--acid); font-weight: 700;
+    text-decoration: underline; text-underline-offset: 4px; margin-top: 0.4em;
+  }
+  #detail-next{
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 3.4em; padding-top: 1.5em;
+    border-top: 1px solid var(--line);
+    background: none; border-left: none; border-right: none; border-bottom: none;
+    width: 100%; cursor: pointer; text-align: left;
+    font-weight: 700; font-size: 1.12rem;
+    transition: color 0.18s ease;
+  }
+  #detail-next:hover{ color: var(--acid); }
+  #detail-next .lbl{ font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 0.35em; }
 
   #detail-close{
-    position: fixed;
-    top: 22px;
-    right: 22px;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 1.5px solid var(--ink-faint);
-    background: rgba(16,44,83,0.65);
-    color: var(--ink);
-    font-size: 1.1rem;
-    cursor: pointer;
-    z-index: 7;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: fixed; top: 20px; right: 20px;
+    width: 50px; height: 50px; border-radius: 12px;
+    border: 1.5px solid var(--line); background: rgba(12,34,66,0.7);
+    font-size: 1.05rem; cursor: pointer; z-index: 17;
+    display: none; align-items: center; justify-content: center;
     transition: border-color 0.2s ease, background 0.2s ease;
   }
-  #detail-close:hover{ border-color: var(--acid); background: rgba(16,44,83,0.9); }
+  #detail-close.on{ display: flex; }
+  #detail-close:hover{ border-color: var(--acid); background: rgba(20,54,102,0.92); }
 
-  /* ---------- shared content typography (used inside detail pages) ---------- */
-
-  .entry + .entry{ margin-top: 1em; }
-  .entry .meta{
-    display: block;
-    font-weight: 700;
-    font-size: 0.9rem;
-    color: var(--bright);
-    margin-bottom: 0.15em;
+  @media (max-width: 900px){
+    #kernel-panel{ display: none; }
+    .title-chip{ font-size: 0.95rem; padding: 0.62em 1.05em; }
   }
-  .entry h3{
-    font-weight: 700;
-    font-size: clamp(1.15rem, 2vw, 1.5rem);
-    margin: 0 0 0.1em;
-  }
-  .entry p{ font-size: clamp(0.98rem, 1.4vw, 1.15rem); }
-
-  a.link{
-    display: inline-block;
-    color: var(--acid);
-    font-weight: 700;
-    text-decoration: underline;
-    text-underline-offset: 4px;
-    margin-top: 0.3em;
-  }
-
-  .skills-grid{ margin: 0; }
-  .skills-grid dt{
-    font-weight: 700;
-    font-size: 0.95rem;
-    color: var(--bright);
-    margin-top: 0.8em;
-  }
-  .skills-grid dt:first-child{ margin-top: 0; }
-  .skills-grid dd{
-    margin: 0.1em 0 0;
-    font-weight: 600;
-    font-size: clamp(1.05rem, 1.7vw, 1.3rem);
-    color: var(--ink-dim);
-  }
-
-  /* ---------- hero ---------- */
-
-  .hero-hint{
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: var(--ink-faint);
-    margin-top: 1.5em;
-    opacity: 1;
-    transition: opacity 0.7s ease;
-  }
-  .hero-hint.hidden{ opacity: 0; }
-  .hero-hint .chevron{ display: inline-block; animation: nudge 1.6s ease-in-out infinite; }
-  @keyframes nudge{
-    0%, 100%{ transform: translateX(0); }
-    50%{ transform: translateX(6px); }
-  }
-
-  .hero h1{ font-size: clamp(3rem, 7.5vw, 6.2rem); }
-  .hero .role{
-    font-weight: 700;
-    font-size: clamp(1.1rem, 2.3vw, 1.6rem);
-    color: var(--bright);
-    margin: 0 0 0.5em;
-  }
-  .hero .tagline{
-    font-weight: 500;
-    font-size: clamp(1rem, 1.6vw, 1.25rem);
-    color: var(--ink-dim);
-    margin: 0 0 1.4em;
-  }
-
-  .formula{
-    font-weight: 500;
-    font-size: 0.82rem;
-    color: var(--ink-faint);
-  }
-
-  /* ---------- outro ---------- */
-
-  .outro .links{
-    display: flex;
-    flex-direction: column;
-    gap: 0.5em;
-    margin: 0.6em 0 1.2em;
-  }
-  .outro .links a{
-    font-weight: 800;
-    font-size: clamp(1.2rem, 2.4vw, 1.7rem);
-    text-decoration: none;
-    color: var(--acid);
-    width: fit-content;
-  }
-  .outro .links a:hover{ color: var(--bright); }
-  .outro .footnote{
-    font-weight: 500;
-    font-size: 0.95rem;
-    color: var(--ink-faint);
-    max-width: 46ch;
-  }
-
-  @media (max-width: 760px){
-    .slide{ padding: 9vh 6vw; }
-    .title-chip{ font-size: 0.8rem; padding: 0.45em 0.85em; }
-  }
-
   @media (prefers-reduced-motion: reduce){
-    #curve-svg{ transition: none; }
-    .dot{ animation: none; }
-    .hero-hint .chevron{ animation: none; }
+    #curve-svg, .dot{ transition: none; }
+    .hero-hint .chevron, #typed .caret, #outro .open-note .pip{ animation: none; }
+    .detail-content > *{ opacity: 1; transform: none; }
   }
 </style>
 </head>
 <body>
 
-<div class="vignette"></div>
+<div id="stage">
+  <svg id="curve-svg" xmlns="http://www.w3.org/2000/svg">
+    <g id="curve-group">
+      <line id="zero-line"></line>
+      <path id="band-path"></path>
+      <g id="samples"></g>
+      <path id="mean-path"></path>
+      <g id="leaders"></g>
+      <g id="dots"></g>
+    </g>
+  </svg>
+</div>
 
-<svg id="curve-svg" xmlns="http://www.w3.org/2000/svg">
-  <g id="curve-group">
-    <path id="band-path" fill="var(--band)"></path>
-    <path id="mean-path"></path>
-    <path id="sample-path" fill="none" stroke="var(--acid)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>
-    <g id="dots"></g>
-  </g>
-</svg>
+<header id="hero">
+  <div class="inner">
+    <p class="name">Luca Pellegrini</p>
+    <p class="role">MSc in Artificial Intelligence — Politecnico di Milano</p>
+    <div id="typed"><span class="txt"></span><span class="caret"></span></div>
+    <div class="hero-hint" id="heroHint"><span>scroll, drag or open the menu</span><span class="chevron">→</span></div>
+  </div>
+</header>
 
 <div id="titles-layer"></div>
-<div id="portal"></div>
-<div id="detail-overlay">
-  <button id="detail-close" aria-label="Close">✕</button>
-  <div class="detail-content" id="detail-body"></div>
-</div>
 
-<div class="viewport" id="viewport">
-  <div class="track" id="track">
-
-    <header class="slide hero text-bottom" id="hero">
-      <div class="slide-inner">
-        <h1>Luca Pellegrini</h1>
-        <p class="role">MSc in Artificial Intelligence — Politecnico di Milano</p>
-        <p class="tagline">i live and learn.</p>
-        <p class="formula">f(x) ~ GP(0, k) &nbsp; k(x, x′) = σ² exp(−(x−x′)² / 2ℓ²)</p>
-        <div class="hero-hint" id="heroHint"><span>scroll to explore</span><span class="chevron">→</span></div>
-      </div>
-    </header>
-
-    <section class="slide" data-x="1" id="education"></section>
-    <section class="slide" data-x="2" id="proj-univ"></section>
-    <section class="slide" data-x="3" id="proj-thesis"></section>
-    <section class="slide" data-x="4" id="proj-lpbf"></section>
-    <section class="slide" data-x="5" id="proj-mesos"></section>
-    <section class="slide" data-x="6" id="thesis-abroad"></section>
-    <section class="slide" data-x="7" id="skills"></section>
-    <section class="slide" data-x="8" id="certifications"></section>
-
-    <footer class="slide outro text-center" data-x="9" id="contact">
-      <div class="slide-inner">
-        <h2>Get in touch</h2>
-        <p>Past this point the model is mostly guessing — which is exactly where you come in.</p>
-        <div class="links">
-          <a href="mailto:luca4.pellegrini@mail.polimi.it">luca4.pellegrini@mail.polimi.it</a>
-          <a href="https://www.linkedin.com/in/luca-pellegrini-514b93251" target="_blank" rel="noopener">LinkedIn</a>
-          <a href="https://github.com/LucaPelle01" target="_blank" rel="noopener">GitHub</a>
-        </div>
-        <p class="footnote">Outside of models and matrices: cooking, music, reading, football, basketball, and F1. Italian is my native language; English, fluent.</p>
-      </div>
-    </footer>
-
+<section id="outro">
+  <div class="inner">
+    <div class="open-note"><span class="pip"></span><span>open to collaborations</span></div>
+    <h2>Get in touch</h2>
+    <p>Past the last observation the model is mostly guessing — which is exactly where you come in. I'm open to research collaborations, thesis projects and anything at the intersection of machine learning and the messy real world. If you have something in mind, write to me.</p>
+    <div class="links">
+      <a href="mailto:luca4.pellegrini@mail.polimi.it">luca4.pellegrini@mail.polimi.it</a>
+      <a href="https://www.linkedin.com/in/luca-pellegrini-514b93251" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="https://github.com/LucaPelle01" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p class="footnote">Outside of models and matrices: cooking, music, reading, football, basketball, and F1. Italian is my native language; English, fluent.</p>
   </div>
-</div>
+</section>
+
+<aside id="kernel-panel">
+  <div id="kernel-controls">
+    <div class="ktitle">RBF kernel</div>
+    <div class="keq">σ²·exp( −‖t−t′‖² / 2ℓ² )</div>
+    <div class="slider-row">
+      <label for="sf-slider"><span>Variance σ²</span><span class="val" id="sf-val">1.00</span></label>
+      <input type="range" id="sf-slider" min="0.35" max="2" step="0.01" value="1">
+    </div>
+    <div class="slider-row">
+      <label for="ls-slider"><span>Length ℓ</span><span class="val" id="ls-val">0.60</span></label>
+      <input type="range" id="ls-slider" min="0.24" max="1.1" step="0.005" value="0.6">
+    </div>
+  </div>
+  <svg id="kernel-matrix" viewBox="0 0 100 100" preserveAspectRatio="none" shape-rendering="crispEdges"></svg>
+</aside>
+
+<div id="progress"></div>
+
+<button id="menu-btn" type="button" aria-label="Open sections menu" aria-expanded="false">
+  <span></span><span></span><span></span>
+</button>
+<div id="scrim"></div>
+<nav id="drawer" aria-label="Sections">
+  <div class="drawer-title">Sections</div>
+  <div id="drawer-list"></div>
+</nav>
+
+<div id="portal"></div>
+<div id="detail-overlay"><div class="detail-content" id="detail-body"></div></div>
+<button id="detail-close" aria-label="Close">✕</button>
 
 <script>
 (function(){
@@ -410,1382 +464,632 @@
 
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // ---------- linear-algebra helpers ----------
-  function zeros(n, m){
-    var A = new Array(n);
-    for (var i=0;i<n;i++){ A[i] = new Array(m).fill(0); }
-    return A;
-  }
-  function kernelMatrix(X1, X2, kfn){
-    var K = zeros(X1.length, X2.length);
-    for (var i=0;i<X1.length;i++){
-      for (var j=0;j<X2.length;j++){ K[i][j] = kfn(X1[i], X2[j]); }
-    }
+  /* ============ linear algebra ============ */
+  function zeros(n,m){ var A=new Array(n); for(var i=0;i<n;i++){ A[i]=new Array(m).fill(0); } return A; }
+  function kernelMatrix(X1,X2,kfn){
+    var K=zeros(X1.length,X2.length);
+    for(var i=0;i<X1.length;i++){ for(var j=0;j<X2.length;j++){ K[i][j]=kfn(X1[i],X2[j]); } }
     return K;
   }
-  // A sum of RBF components at different scales is still a valid (PSD) kernel,
-  // but produces much richer, non-linear sample paths than a single RBF —
-  // a broad component sets the overall trend, finer components add texture.
-  // Lengthscales and variances are re-drawn at random on every page load.
-  function makeRandomMixtureKernel(){
-    var comps = [
-      { l: 1.5 + Math.random()*1.3, v: 0.5  + Math.random()*0.35 },  // broad trend
-      { l: 0.55 + Math.random()*0.7, v: 0.15 + Math.random()*0.25 }, // mid detail
-      { l: 0.18 + Math.random()*0.27, v: 0.04 + Math.random()*0.11 } // fine texture
-    ];
-    return function(x1, x2){
-      var d = x1 - x2, sum = 0;
-      for (var c=0; c<comps.length; c++){
-        var l = comps[c].l;
-        sum += comps[c].v * Math.exp(-(d*d)/(2*l*l));
-      }
-      return sum;
-    };
-  }
-  function matMul(A, B){
-    var n = A.length, k = B.length, m = B[0].length;
-    var C = zeros(n, m);
-    for (var i=0;i<n;i++){
-      for (var j=0;j<m;j++){
-        var s = 0;
-        for (var p=0;p<k;p++){ s += A[i][p]*B[p][j]; }
-        C[i][j] = s;
-      }
-    }
+  function matMul(A,B){
+    var n=A.length,k=B.length,m=B[0].length,C=zeros(n,m);
+    for(var i=0;i<n;i++){ for(var j=0;j<m;j++){ var s=0; for(var p=0;p<k;p++){ s+=A[i][p]*B[p][j]; } C[i][j]=s; } }
     return C;
   }
   function transpose(A){
-    var n = A.length, m = A[0].length;
-    var T = zeros(m, n);
-    for (var i=0;i<n;i++){ for (var j=0;j<m;j++){ T[j][i] = A[i][j]; } }
+    var n=A.length,m=A[0].length,T=zeros(m,n);
+    for(var i=0;i<n;i++){ for(var j=0;j<m;j++){ T[j][i]=A[i][j]; } }
     return T;
   }
   function invert(A){
-    var n = A.length;
-    var M = A.map(function(row, i){
-      var r = row.slice();
-      for (var j=0;j<n;j++){ r.push(i===j ? 1 : 0); }
-      return r;
-    });
-    for (var col=0; col<n; col++){
-      var pivot = col;
-      for (var r2=col+1; r2<n; r2++){
-        if (Math.abs(M[r2][col]) > Math.abs(M[pivot][col])) pivot = r2;
-      }
-      var tmp = M[col]; M[col] = M[pivot]; M[pivot] = tmp;
-      var pv = M[col][col] || 1e-9;
-      for (var c=0;c<2*n;c++){ M[col][c] /= pv; }
-      for (var r=0;r<n;r++){
-        if (r===col) continue;
-        var factor = M[r][col];
-        for (var c2=0;c2<2*n;c2++){ M[r][c2] -= factor*M[col][c2]; }
+    var n=A.length;
+    var M=A.map(function(row,i){ var r=row.slice(); for(var j=0;j<n;j++){ r.push(i===j?1:0); } return r; });
+    for(var col=0;col<n;col++){
+      var pivot=col;
+      for(var r2=col+1;r2<n;r2++){ if(Math.abs(M[r2][col])>Math.abs(M[pivot][col])) pivot=r2; }
+      var tmp=M[col]; M[col]=M[pivot]; M[pivot]=tmp;
+      var pv=M[col][col]||1e-9;
+      for(var c=0;c<2*n;c++){ M[col][c]/=pv; }
+      for(var r=0;r<n;r++){
+        if(r===col) continue;
+        var f=M[r][col];
+        for(var c2=0;c2<2*n;c2++){ M[r][c2]-=f*M[col][c2]; }
       }
     }
     return M.map(function(row){ return row.slice(n); });
   }
   function cholesky(A){
-    var n = A.length;
-    var jitter = 1e-6;
-    var L = zeros(n, n);
-    for (var i=0;i<n;i++){
-      for (var j=0;j<=i;j++){
-        var sum = A[i][j];
-        for (var k=0;k<j;k++){ sum -= L[i][k]*L[j][k]; }
-        if (i===j){
-          var val = sum + jitter;
-          L[i][j] = Math.sqrt(Math.max(val, 1e-12));
-        } else {
-          L[i][j] = sum / (L[j][j] || 1e-9);
-        }
+    var n=A.length,L=zeros(n,n);
+    for(var i=0;i<n;i++){
+      for(var j=0;j<=i;j++){
+        var sum=A[i][j];
+        for(var k=0;k<j;k++){ sum-=L[i][k]*L[j][k]; }
+        if(i===j){ L[i][j]=Math.sqrt(Math.max(sum+1e-6,1e-12)); }
+        else { L[i][j]=sum/(L[j][j]||1e-9); }
       }
     }
     return L;
   }
   function randNormalVector(n){
-    var v = new Array(n);
-    for (var i=0;i<n;i++){
-      var u1 = Math.random() || 1e-9, u2 = Math.random();
-      v[i] = Math.sqrt(-2*Math.log(u1)) * Math.cos(2*Math.PI*u2);
+    var v=new Array(n);
+    for(var i=0;i<n;i++){
+      var u1=Math.random()||1e-9,u2=Math.random();
+      v[i]=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
     }
     return v;
   }
-
-  function gaussianProcess(Xtrain, Ytrain, Xgrid, kfn, noise){
-    var n = Xtrain.length;
-    var K = kernelMatrix(Xtrain, Xtrain, kfn);
-    for (var i=0;i<n;i++){ K[i][i] += noise; }
-    var Kinv = invert(K);
-
-    var Ks  = kernelMatrix(Xtrain, Xgrid, kfn);
-    var Kss = kernelMatrix(Xgrid, Xgrid, kfn);
-    var KsT = transpose(Ks);
-
-    var Yt = Ytrain.map(function(y){ return [y]; });
-    var mu = matMul(matMul(KsT, Kinv), Yt).map(function(r){ return r[0]; });
-
-    var A = matMul(KsT, Kinv);
-    var B = matMul(A, Ks);
-    var g = Xgrid.length;
-    var cov = zeros(g, g);
-    for (var r=0;r<g;r++){
-      for (var c=0;c<g;c++){
-        cov[r][c] = Kss[r][c] - B[r][c];
-        if (r===c) cov[r][c] += 1e-6;
-      }
-    }
-
-    var variance = new Array(g);
-    for (var d=0; d<g; d++){ variance[d] = Math.max(cov[d][d], 0); }
-
-    var L = cholesky(cov);
-    var z = randNormalVector(g);
-    var sample = new Array(g);
-    for (var row=0; row<g; row++){
-      var s = mu[row];
-      for (var col=0; col<=row; col++){ s += L[row][col]*z[col]; }
-      sample[row] = s;
-    }
-    return { mu: mu, variance: variance, sample: sample };
-  }
-
-  function linspace(a, b, n){
-    var out = new Array(n);
-    for (var i=0;i<n;i++){ out[i] = a + (b-a)*i/(n-1); }
-    return out;
-  }
+  function linspace(a,b,n){ var o=new Array(n); for(var i=0;i<n;i++){ o[i]=a+(b-a)*i/(n-1); } return o; }
+  function easeInOutCubic(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+  function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
 
   function smoothPath(pts){
-    if (pts.length < 3) {
-      return 'M' + pts.map(function(p){ return p[0]+','+p[1]; }).join('L');
-    }
-    var d = 'M' + pts[0][0] + ',' + pts[0][1] + ' ';
-    for (var i=0;i<pts.length-1;i++){
-      var p0 = pts[i-1] || pts[i];
-      var p1 = pts[i];
-      var p2 = pts[i+1];
-      var p3 = pts[i+2] || p2;
-      var c1x = p1[0] + (p2[0]-p0[0])/6;
-      var c1y = p1[1] + (p2[1]-p0[1])/6;
-      var c2x = p2[0] - (p3[0]-p1[0])/6;
-      var c2y = p2[1] - (p3[1]-p1[1])/6;
-      d += 'C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2[0] + ',' + p2[1] + ' ';
+    if(pts.length<3){ return 'M'+pts.map(function(p){ return p[0]+','+p[1]; }).join('L'); }
+    var d='M'+pts[0][0]+','+pts[0][1]+' ';
+    for(var i=0;i<pts.length-1;i++){
+      var p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;
+      d+='C'+(p1[0]+(p2[0]-p0[0])/6)+','+(p1[1]+(p2[1]-p0[1])/6)+' '+
+            (p2[0]-(p3[0]-p1[0])/6)+','+(p2[1]-(p3[1]-p1[1])/6)+' '+
+            p2[0]+','+p2[1]+' ';
     }
     return d;
   }
 
-  function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2; }
+  /* ============ GP model ============
+     The bold line is the POSTERIOR MEAN, E[f(x)|data] — the expected
+     function given the observations, not a random draw. What changes per
+     visit (and under the sliders) are the kernel hyperparameters, which is
+     what genuinely reshapes that expectation.
+  =================================== */
 
-  // ---------- content for each point: short chip label + full detail page ----------
+  var Xtrain = [1,2,3,4,5,6,7];
+  var Ytrain = [0.2,-0.8,0.6,-0.3,0.9,-0.6,0.4];
+  var NOISE = 1e-4;
+  var N_SAMPLES = 2;
+  var LS_MIN = 0.24, SF_MAX = 2.0;   // mirrored by the slider bounds in the markup
+
+  var lengthscale = LS_MIN + Math.random()*(0.9 - LS_MIN);
+  var sigmaF2     = 0.6 + Math.random()*1.0;
+
+  function kernelFn(l,v){
+    return function(x1,x2){ var d=x1-x2; return v*Math.exp(-(d*d)/(2*l*l)); };
+  }
+
+  var gpX = linspace(0.15, 7.85, 190);
+  var gpMean = [], gpStd = [], gpSamples = [];
+
+  function solveGP(withSamples){
+    var kfn = kernelFn(lengthscale, sigmaF2);
+    var n = Xtrain.length, g = gpX.length;
+
+    var K = kernelMatrix(Xtrain,Xtrain,kfn);
+    for(var i=0;i<n;i++){ K[i][i]+=NOISE; }
+    var Kinv = invert(K);
+
+    var Ks = kernelMatrix(Xtrain,gpX,kfn);
+    var A = matMul(transpose(Ks),Kinv);
+    gpMean = matMul(A, Ytrain.map(function(y){ return [y]; })).map(function(r){ return r[0]; });
+
+    var Kss = kernelMatrix(gpX,gpX,kfn);
+    var B = matMul(A,Ks);
+    gpStd = new Array(g);
+    for(var d=0; d<g; d++){ gpStd[d] = Math.sqrt(Math.max(Kss[d][d]-B[d][d], 0)); }
+
+    if(withSamples){
+      var cov = zeros(g,g);
+      for(var r=0;r<g;r++){
+        for(var c=0;c<g;c++){
+          cov[r][c] = Kss[r][c]-B[r][c];
+          if(r===c) cov[r][c]+=1e-6;
+        }
+      }
+      var L = cholesky(cov);
+      gpSamples = [];
+      for(var s=0;s<N_SAMPLES;s++){
+        var z = randNormalVector(g), sample = new Array(g);
+        for(var row=0;row<g;row++){
+          var acc = gpMean[row];
+          for(var col=0;col<=row;col++){ acc += L[row][col]*z[col]; }
+          sample[row] = acc;
+        }
+        gpSamples.push(sample);
+      }
+    }
+  }
+
+  /* ============ content ============ */
+
   var POINTS = [
-    { x: 1, chip: 'Education', title: 'Education', body: `
-      <div class="entry">
-        <span class="meta">Sep. 2025 – Present</span>
-        <h3>Politecnico di Milano</h3>
-        <p>MSc in Computer Science and Engineering, Artificial Intelligence track.</p>
-      </div>
-      <div class="entry">
-        <span class="meta">Sep. 2021 – Jul. 2024</span>
-        <h3>Università di Bologna</h3>
-        <p>BSc in Management Engineering. Final mark 105/110.</p>
-      </div>` },
-    { x: 2, chip: 'Management Competition', title: 'University Management Competition', body: `
-      <p>Business-game simulation, University of Bologna. Steered corporate strategy, capital budgeting, and operations for a simulated company competing against other universities under market uncertainty.</p>` },
-    { x: 3, chip: 'Undergrad Thesis', title: 'Undergraduate Thesis', body: `
-      <p>Advised by Prof. Wilma Penzo (DISI, University of Bologna). Evaluated AutoML pipelines as decision-support tools for failure prediction in Porto's metropolitan transport system, weighing automated modeling against domain-guided feature engineering across more than 10.7 million sensor readings.</p>` },
-    { x: 4, chip: 'LPBF Monitoring', title: 'In-Situ Monitoring of Laser Powder Bed Fusion', body: `
-      <p>Politecnico di Milano. Modeled stochastic melt-pool thermal dynamics from non-stationary dual-wavelength pyrometry data, then built spatio-temporal statistical control charts to catch process instability before it became a defect.</p>` },
-    { x: 5, chip: 'Mesos', title: 'Mesos', body: `
-      <p>A distributed Java implementation of a board game, architected end-to-end with MVC and OOP patterns. The server runs over multithreaded TCP sockets with a custom message-passing protocol and error recovery, with both CLI and GUI clients backed by JUnit test suites.</p>
-      <a class="link" href="https://github.com/Albi0607/ing-sw-2026-Zonzin-Pellegrini-Samarani-Roveda" target="_blank" rel="noopener">View the code</a>` },
-    { x: 6, chip: 'Thesis Abroad', title: "Master's Thesis — In Progress", body: `
-      <p>Planning a thesis abroad in NeuroAI, at the intersection of neuroscience and machine learning. In conversation with labs including MIT CBMM, Stanford's NeuroAI Lab, Princeton, and EPFL's Mathis Lab, while working through selection criteria and PoliMi's administrative pathway.</p>` },
-    { x: 7, chip: 'Skills', title: 'Skills', body: `
-      <dl class="skills-grid">
-        <dt>Languages</dt><dd>Python, Java, SQL, Cypher, CQL</dd>
-        <dt>Tools</dt><dd>Git, Linux, Minitab, H2O</dd>
-        <dt>Data systems</dt><dd>Neo4j, MongoDB, Elasticsearch, Redis, Spark SQL</dd>
-      </dl>` },
-    { x: 8, chip: 'Certifications', title: 'Certifications', body: `
-      <div class="entry">
-        <span class="meta">Nov. 2024 – Jan. 2025</span>
-        <h3>Associate Data Scientist — DataCamp</h3>
-      </div>
-      <div class="entry">
-        <span class="meta">Oct. 2024</span>
-        <h3>IELTS 7.0, CEFR C1 — British Council</h3>
-      </div>` }
+    { x:1, chip:'Education', kicker:'Where it started', title:'Education',
+      hue:'linear-gradient(135deg,#ff8c8c,#4dc9ff)', body:
+      '<div class="entry"><span class="meta">Sep. 2025 – Present</span><h3>Politecnico di Milano</h3>' +
+      '<p>MSc in Computer Science and Engineering, Artificial Intelligence track. Coursework centred on reinforcement learning, computational statistics and the theory underpinning modern machine learning — including the Gaussian processes this page is built on.</p></div>' +
+      '<div class="entry"><span class="meta">Sep. 2021 – Jul. 2024</span><h3>Università di Bologna</h3>' +
+      '<p>BSc in Management Engineering, final mark 105/110. A grounding in operations, statistics and decision-making under uncertainty that still shapes how I frame technical problems.</p></div>' },
+
+    { x:2, chip:'Management Competition', kicker:'Strategy under uncertainty', title:'University Management Competition',
+      hue:'linear-gradient(135deg,#4dc9ff,#8f7bff)', body:
+      '<p>A cross-university business-game simulation run at the University of Bologna, where teams steered a virtual company through several simulated market cycles.</p>' +
+      '<ul><li>Set corporate strategy and pricing against live competitor behaviour.</li>' +
+      '<li>Ran capital budgeting and production planning under demand volatility.</li>' +
+      '<li>Balanced short-term margin against market-share positioning.</li></ul>' },
+
+    { x:3, chip:'Undergrad Thesis', kicker:'AutoML on the metro', title:'Undergraduate Thesis',
+      hue:'linear-gradient(135deg,#8f7bff,#ff8c8c)', body:
+      '<p>Advised by Prof. Wilma Penzo (DISI, University of Bologna). The question: can AutoML pipelines serve as genuine decision-support for failure prediction in a metropolitan transport system, or does domain knowledge still win?</p>' +
+      '<ul><li>Worked across more than 10.7 million high-frequency sensor readings from the Porto metropolitan system.</li>' +
+      '<li>Deployed and evaluated H2O AutoML pipelines end to end.</li>' +
+      '<li>Weighed automated model search against domain-guided feature engineering, and characterised where each one pays off.</li></ul>' },
+
+    { x:4, chip:'LPBF Monitoring', kicker:'Statistics on a melt pool', title:'In-Situ Monitoring of Laser Powder Bed Fusion',
+      hue:'linear-gradient(135deg,#ff8c8c,#ffc46b)', body:
+      '<p>Politecnico di Milano. Additive manufacturing fails quietly: by the time a defect is visible, the part is already lost. The goal was to catch instability while the build was still running.</p>' +
+      '<ul><li>Modelled stochastic melt-pool thermal dynamics from non-stationary dual-wavelength pyrometry data.</li>' +
+      '<li>Developed, tuned and validated statistical control charts across spatio-temporal layers.</li>' +
+      '<li>Used them for in-process anomaly detection rather than post-hoc inspection.</li></ul>' },
+
+    { x:5, chip:'Mesos', kicker:'Distributed systems in Java', title:'Mesos',
+      hue:'linear-gradient(135deg,#ffc46b,#4dc9ff)', body:
+      '<p>A full-stack, distributed Java implementation of a board game, built end to end at Politecnico di Milano.</p>' +
+      '<ul><li>Architected with MVC and OOP design patterns to keep domain logic cleanly abstracted.</li>' +
+      '<li>Concurrent server over multithreaded TCP sockets with a custom message-passing protocol and error recovery.</li>' +
+      '<li>Both CLI and GUI clients, backed by JUnit test suites.</li></ul>' +
+      '<a class="link" href="https://github.com/Albi0607/ing-sw-2026-Zonzin-Pellegrini-Samarani-Roveda" target="_blank" rel="noopener">View the code on GitHub</a>' },
+
+    { x:6, chip:'Skills', kicker:'Toolkit', title:'Skills',
+      hue:'linear-gradient(135deg,#8f7bff,#4dc9ff)', body:
+      '<dl class="skills-grid">' +
+      '<dt>Programming &amp; query languages</dt><dd>Python, Java, SQL, Cypher (advanced) · CQL (intermediate)</dd>' +
+      '<dt>Tools &amp; frameworks</dt><dd>Git (advanced), Linux (intermediate), Minitab, H2O</dd>' +
+      '<dt>Databases &amp; systems</dt><dd>Neo4j, MongoDB, Elasticsearch, Redis, Spark SQL</dd>' +
+      '<dt>Languages</dt><dd>Italian (native) · English (fluent, IELTS 7.0 / C1)</dd></dl>' },
+
+    { x:7, chip:'Certifications', kicker:'On paper', title:'Certifications',
+      hue:'linear-gradient(135deg,#ffc46b,#ff8c8c)', body:
+      '<div class="entry"><span class="meta">Nov. 2024 – Jan. 2025</span><h3>Associate Data Scientist — DataCamp</h3>' +
+      '<p>Practical data science track covering data manipulation, exploratory analysis and supervised learning in Python.</p></div>' +
+      '<div class="entry"><span class="meta">Oct. 2024</span><h3>IELTS 7.0 (CEFR C1) — British Council</h3></div>' }
   ];
 
-  // ---------- page/paging state ----------
-  var viewport = document.getElementById('viewport');
-  var track = document.getElementById('track');
-  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
-  var svg = document.getElementById('curve-svg');
-  var curveGroup = document.getElementById('curve-group');
-  var bandPath = document.getElementById('band-path');
-  var meanPath = document.getElementById('mean-path');
-  var samplePath = document.getElementById('sample-path');
-  var dotsGroup = document.getElementById('dots');
-  var titlesLayer = document.getElementById('titles-layer');
-  var portal = document.getElementById('portal');
-  var detailOverlay = document.getElementById('detail-overlay');
-  var detailBody = document.getElementById('detail-body');
-  var detailCloseBtn = document.getElementById('detail-close');
+  /* ============ elements ============ */
 
-  var Xtrain = [1,2,3,4,5,6,7,8];
-  var Ytrain = [0.2,-0.8,0.6,-0.3,0.9,-0.6,0.4,-0.2];
-  var CHIP_SIDE = Ytrain.map(function(y){ return y >= 0 ? 1 : -1; }); // 1 = label below dot, -1 = above
-  var ZOOM = 0.38; // < 1 = zoomed out: several points' worth of curve visible at once
+  var stage=document.getElementById('stage'), svg=document.getElementById('curve-svg');
+  var curveGroup=document.getElementById('curve-group'), bandPath=document.getElementById('band-path');
+  var meanPath=document.getElementById('mean-path'), samplesGroup=document.getElementById('samples');
+  var dotsGroup=document.getElementById('dots'), leadersGroup=document.getElementById('leaders');
+  var zeroLine=document.getElementById('zero-line');
+  var titlesLayer=document.getElementById('titles-layer');
+  var heroEl=document.getElementById('hero'), heroHint=document.getElementById('heroHint');
+  var typedTxt=document.querySelector('#typed .txt');
+  var outroEl=document.getElementById('outro');
+  var menuBtn=document.getElementById('menu-btn'), scrim=document.getElementById('scrim');
+  var drawerList=document.getElementById('drawer-list');
+  var kernelPanel=document.getElementById('kernel-panel'), kernelMatrixEl=document.getElementById('kernel-matrix');
+  var progressEl=document.getElementById('progress');
+  var portal=document.getElementById('portal'), detailOverlay=document.getElementById('detail-overlay');
+  var detailBody=document.getElementById('detail-body'), detailClose=document.getElementById('detail-close');
+  var lsSlider=document.getElementById('ls-slider'), sfSlider=document.getElementById('sf-slider');
+  var lsVal=document.getElementById('ls-val'), sfVal=document.getElementById('sf-val');
+  var svgNS='http://www.w3.org/2000/svg';
 
-  var svgNS = 'http://www.w3.org/2000/svg';
-  var currentIndex = 0;
-  var isAnimating = false;
-  var detailOpen = false;
-  var totalLen = 0;
-  var gpX = null, gpResult = null, gpScale = 1;
-  var CENTER_Y = 0, AMPLITUDE = 1;
+  var MIN_X=0, MAX_X=8, ZOOM=0.34;
+  var camX=0, targetCam=0;
+  var scripted=false, detailOpen=false, menuOpen=false, openX=null;
+  var CENTER_Y=0, AMPLITUDE=1, PX_PER_X=1;
+  var dotEls=[];
 
-  // ---------- floating title chips (created once) ----------
+  /* ============ curve drawing ============ */
+
+  function verticalFit(){
+    var m=0.7;
+    for(var i=0;i<gpX.length;i++){ m=Math.max(m, Math.abs(gpMean[i])+1.96*gpStd[i]); }
+    return m;
+  }
+
+  function redrawCurve(){
+    var w=window.innerWidth, h=window.innerHeight;
+    PX_PER_X = w*ZOOM;
+    CENTER_Y = h*0.5;
+    AMPLITUDE = (h*0.33)/verticalFit();
+
+    zeroLine.setAttribute('x1', -PX_PER_X);
+    zeroLine.setAttribute('x2', (MAX_X+1)*PX_PER_X);
+    zeroLine.setAttribute('y1', CENTER_Y);
+    zeroLine.setAttribute('y2', CENTER_Y);
+
+    var upper=[],lower=[],mean=[];
+    for(var i=0;i<gpX.length;i++){
+      var px=gpX[i]*PX_PER_X;
+      upper.push([px, CENTER_Y-(gpMean[i]+1.96*gpStd[i])*AMPLITUDE]);
+      lower.push([px, CENTER_Y-(gpMean[i]-1.96*gpStd[i])*AMPLITUDE]);
+      mean.push([px, CENTER_Y-gpMean[i]*AMPLITUDE]);
+    }
+    bandPath.setAttribute('d', smoothPath(upper)+' '+smoothPath(lower.slice().reverse()).replace(/^M/,'L')+' Z');
+    meanPath.setAttribute('d', smoothPath(mean));
+
+    samplesGroup.innerHTML='';
+    gpSamples.forEach(function(s){
+      var pts=[];
+      for(var i=0;i<gpX.length;i++){ pts.push([gpX[i]*PX_PER_X, CENTER_Y-s[i]*AMPLITUDE]); }
+      var p=document.createElementNS(svgNS,'path');
+      p.setAttribute('class','sample-path');
+      p.setAttribute('d', smoothPath(pts));
+      samplesGroup.appendChild(p);
+    });
+
+    dotsGroup.innerHTML=''; leadersGroup.innerHTML=''; dotEls=[];
+    Xtrain.forEach(function(x,idx){
+      var px=x*PX_PER_X, py=CENTER_Y-Ytrain[idx]*AMPLITUDE;
+      var side=Ytrain[idx]>=0 ? 1 : -1;
+
+      var ln=document.createElementNS(svgNS,'line');
+      ln.setAttribute('class','leader');
+      ln.setAttribute('x1',px); ln.setAttribute('y1',py);
+      ln.setAttribute('x2',px); ln.setAttribute('y2',py+side*74);
+      leadersGroup.appendChild(ln);
+
+      var c=document.createElementNS(svgNS,'circle');
+      c.setAttribute('cx',px); c.setAttribute('cy',py); c.setAttribute('r',7);
+      c.setAttribute('class','dot');
+      dotsGroup.appendChild(c);
+      dotEls.push(c);
+    });
+  }
+
+  /* ============ kernel covariance matrix (distill-style) ============
+     N=25 linearly spaced values over [-5,5]; each cell shows the pairwise
+     covariance, normalised to [0,1] against the maximum variance so that
+     sigma^2 reads as intensity and l reads as the width of the banding
+     around the diagonal.
+  ================================================================= */
+
+  var KN = 25;
+  var YLGNBU = [
+    [255,255,217],[237,248,177],[199,233,180],[127,205,187],[65,182,196],
+    [29,145,192],[34,94,168],[37,52,148],[8,29,88]
+  ];
+  function ylGnBu(t){
+    t = clamp(t,0,1);
+    var n = YLGNBU.length-1;
+    var seg = Math.min(Math.floor(t*n), n-1);
+    var f = t*n - seg;
+    var a = YLGNBU[seg], b = YLGNBU[seg+1];
+    return 'rgb('+Math.round(a[0]+(b[0]-a[0])*f)+','+
+                  Math.round(a[1]+(b[1]-a[1])*f)+','+
+                  Math.round(a[2]+(b[2]-a[2])*f)+')';
+  }
+
+  var kCells=[];
+  (function buildKernelMatrix(){
+    var cell = 100/KN;
+    for(var i=0;i<KN;i++){
+      for(var j=0;j<KN;j++){
+        var r=document.createElementNS(svgNS,'rect');
+        r.setAttribute('x',(j*cell).toFixed(3));
+        r.setAttribute('y',(i*cell).toFixed(3));
+        r.setAttribute('width',cell.toFixed(3));
+        r.setAttribute('height',cell.toFixed(3));
+        r.setAttribute('stroke','rgba(255,255,255,0.55)');
+        r.setAttribute('stroke-width','0.12');
+        kernelMatrixEl.appendChild(r);
+        kCells.push(r);
+      }
+    }
+  })();
+
+  function updateKernelMatrix(){
+    var ts = linspace(-5,5,KN);
+    // The matrix spans 10 units while the observed points span 6, so l is
+    // rescaled by that ratio: the banding you see here is the same
+    // correlation length the eye reads off the curve.
+    var lPlot = lengthscale * (10 / (Xtrain[Xtrain.length-1] - Xtrain[0]));
+    var idx=0;
+    for(var i=0;i<KN;i++){
+      for(var j=0;j<KN;j++){
+        var d = ts[i]-ts[j];
+        var k = sigmaF2*Math.exp(-(d*d)/(2*lPlot*lPlot));
+        kCells[idx++].setAttribute('fill', ylGnBu(k/SF_MAX));
+      }
+    }
+    lsVal.textContent = lengthscale.toFixed(3);
+    sfVal.textContent = sigmaF2.toFixed(3);
+  }
+
+  /* ============ chips ============ */
+
   var chipEls = POINTS.map(function(p){
-    var btn = document.createElement('button');
-    btn.className = 'title-chip';
-    btn.type = 'button';
-    btn.textContent = p.chip;
+    var btn=document.createElement('button');
+    btn.className='title-chip'; btn.type='button';
+    btn.innerHTML = p.chip + '<span class="cue">open →</span>';
     btn.addEventListener('click', function(){ onChipClick(p.x); });
+    btn.addEventListener('mouseenter', function(){ var d=dotEls[p.x-1]; if(d) d.classList.add('hot'); });
+    btn.addEventListener('mouseleave', function(){ var d=dotEls[p.x-1]; if(d) d.classList.remove('hot'); });
     titlesLayer.appendChild(btn);
     return btn;
   });
 
-  // Draw the random function once per page load: pick fresh, random
-  // lengthscales/variances for the kernel mixture, then sample a posterior
-  // draw. Resizing the window only re-projects this same function to
-  // pixels — it never reshuffles mid-visit.
-  function initGP(){
-    var kfn = makeRandomMixtureKernel();
-    gpX = linspace(-0.35, slides.length - 0.65, 280);
-    gpResult = gaussianProcess(Xtrain, Ytrain, gpX, kfn, 1e-5);
-
-    // Auto-fit: measure how far mean/band/sample actually wander across the
-    // "core" span that holds the timeline points, so wilder random draws
-    // (bigger variance, shorter lengthscales) still land nicely on screen.
-    var coreMax = 0.6;
-    for (var i=0;i<gpX.length;i++){
-      var x = gpX[i];
-      if (x < Xtrain[0]-0.5 || x > Xtrain[Xtrain.length-1]+0.5) continue;
-      var std = Math.sqrt(gpResult.variance[i]);
-      coreMax = Math.max(coreMax, Math.abs(gpResult.mu[i]) + 1.96*std, Math.abs(gpResult.sample[i]));
-    }
-    gpScale = coreMax;
+  function dotScreenPos(x){
+    return { x: window.innerWidth/2 + (x-camX)*PX_PER_X, y: CENTER_Y - Ytrain[x-1]*AMPLITUDE };
   }
 
-  function layout(){
-    var w = window.innerWidth;
-    var h = window.innerHeight;
-    var totalW = slides.length * w;
+  /* ============ per-frame render ============ */
 
-    track.style.width = totalW + 'px';
-    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
-    svg.setAttribute('width', w);
-    svg.setAttribute('height', h);
+  function render(){
+    var w=window.innerWidth;
 
-    var centerY = h * 0.46;
-    var amplitude = (h * 0.40) / gpScale;
-    CENTER_Y = centerY;
-    AMPLITUDE = amplitude;
+    curveGroup.setAttribute('transform','translate('+(w/2 - camX*PX_PER_X)+',0)');
 
-    var upperPts = [], lowerPts = [], samplePts = [], meanPts = [];
-    for (var i=0;i<gpX.length;i++){
-      var x = gpX[i];
-      var px = x * w * ZOOM;
-      var std = Math.sqrt(gpResult.variance[i]);
-      var upperY = centerY - (gpResult.mu[i] + 1.96*std) * amplitude;
-      var lowerY = centerY - (gpResult.mu[i] - 1.96*std) * amplitude;
-      var sampY  = centerY - gpResult.sample[i] * amplitude;
-      var meanY  = centerY - gpResult.mu[i] * amplitude;
-      upperPts.push([px, upperY]);
-      lowerPts.push([px, lowerY]);
-      samplePts.push([px, sampY]);
-      meanPts.push([px, meanY]);
-    }
+    // the plot fades up out of the hero and is fully gone before the outro,
+    // so nothing ever shows through the contact screen
+    var curveOpacity = clamp((camX-0.12)/0.5, 0, 1) * clamp((7.55-camX)/0.45, 0, 1);
+    curveGroup.style.opacity = curveOpacity;
 
-    var bandD = smoothPath(upperPts) + ' ' +
-                smoothPath(lowerPts.slice().reverse()).replace(/^M/, 'L') + ' Z';
-    bandPath.setAttribute('d', bandD);
-    meanPath.setAttribute('d', smoothPath(meanPts));
-    samplePath.setAttribute('d', smoothPath(samplePts));
+    var outroOp = clamp((camX-7.45)/0.5, 0, 1);
+    outroEl.style.opacity = outroOp;
+    outroEl.style.pointerEvents = outroOp>0.5 ? 'auto' : 'none';
+    outroEl.style.transform = 'translateX('+((MAX_X-camX)*70)+'px)';
 
-    dotsGroup.innerHTML = '';
-    Xtrain.forEach(function(x, idx){
-      var px = x * w * ZOOM;
-      var py = centerY - Ytrain[idx]*amplitude;
-      var circle = document.createElementNS(svgNS, 'circle');
-      circle.setAttribute('cx', px);
-      circle.setAttribute('cy', py);
-      circle.setAttribute('r', 7);
-      circle.setAttribute('class', 'dot');
-      circle.style.animationDelay = (idx * 0.35) + 's';
-      dotsGroup.appendChild(circle);
+    POINTS.forEach(function(p,i){
+      var chip=chipEls[i];
+      var absD=Math.abs(p.x-camX);
+      if(absD>1.9 || curveOpacity<0.03){ chip.style.opacity=0; chip.style.pointerEvents='none'; return; }
+      var pos=dotScreenPos(p.x);
+      var side = Ytrain[p.x-1]>=0 ? 1 : -1;
+      var sc = 0.87 + 0.13*clamp(1-absD/1.2, 0, 1);
+      chip.style.transform='translate('+pos.x+'px,'+(pos.y+side*104)+'px) translate(-50%,-50%) scale('+sc+')';
+      chip.style.opacity = curveOpacity * clamp(1-absD/1.9, 0.12, 1);
+      chip.style.pointerEvents = absD<1.5 ? 'auto' : 'none';
     });
 
-    totalLen = samplePath.getTotalLength();
+    var heroOp = clamp(1-camX/0.6, 0, 1);
+    heroEl.style.opacity = heroOp;
+    heroEl.style.pointerEvents = heroOp>0.5 ? 'auto' : 'none';
+    heroEl.style.transform = 'translateX('+(-camX*80)+'px)';
+
+    kernelPanel.style.opacity = curveOpacity;
+    kernelPanel.style.pointerEvents = curveOpacity>0.4 ? 'auto' : 'none';
+
+    progressEl.style.width = (camX/MAX_X*100)+'%';
+
+    var near=Math.round(camX);
+    Array.prototype.forEach.call(drawerList.children, function(b){
+      b.classList.toggle('current', parseInt(b.dataset.x,10)===near);
+    });
   }
 
-  var slideInners = slides.map(function(s){ return s.querySelector('.slide-inner'); });
-  var heroHint = document.getElementById('heroHint');
-  var heroHintHidden = false;
+  function frame(){
+    if(!scripted){
+      camX += (targetCam-camX)*(reduceMotion?1:0.1);
+      if(Math.abs(targetCam-camX)<0.0004) camX=targetCam;
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
 
-  function animateScrollTo(targetLeft, duration, onDone){
-    var startLeft = viewport.scrollLeft;
-    var diff = targetLeft - startLeft;
-    if (Math.abs(diff) < 1){ if (onDone) onDone(); return; }
-    var startTime = null;
+  /* ============ navigation ============ */
+
+  function animateCam(to, duration, done){
+    var from=camX, diff=to-from, start=null;
+    if(reduceMotion || Math.abs(diff)<0.001){ camX=to; targetCam=to; if(done) done(); return; }
+    scripted=true;
     function step(ts){
-      if (startTime === null) startTime = ts;
-      var t = Math.min((ts - startTime) / duration, 1);
-      viewport.scrollLeft = startLeft + diff * easeInOutCubic(t);
-      if (t < 1){ requestAnimationFrame(step); }
-      else if (onDone){ onDone(); }
+      if(start===null) start=ts;
+      var t=Math.min((ts-start)/duration,1);
+      camX = from + diff*easeInOutCubic(t);
+      targetCam = camX;
+      if(t<1){ requestAnimationFrame(step); }
+      else { scripted=false; targetCam=camX; if(done) done(); }
     }
     requestAnimationFrame(step);
   }
 
-  function goTo(index, onArrive){
-    index = Math.max(0, Math.min(slides.length - 1, index));
-    currentIndex = index;
-    isAnimating = true;
-    samplePath.classList.add('traveling');
-    function finish(){
-      isAnimating = false;
-      samplePath.classList.remove('traveling');
-      if (onArrive) onArrive();
-    }
-    if (reduceMotion){
-      viewport.scrollLeft = index * window.innerWidth;
-      finish();
-    } else {
-      animateScrollTo(index * window.innerWidth, 820, finish);
-    }
+  // Straight, single glide from wherever you are to the chosen section.
+  function goToSection(x){
+    var dist = Math.abs(x-camX);
+    animateCam(x, clamp(520 + dist*120, 520, 1250));
   }
 
-  // ---------- continuous per-frame updates: pan the curve, float the chips ----------
-  function updateContinuous(){
-    var w = window.innerWidth;
-    var progress = viewport.scrollLeft / w;
+  POINTS.forEach(function(p,i){
+    var b=document.createElement('button');
+    b.type='button'; b.dataset.x=p.x;
+    b.innerHTML='<span class="idx">'+String(i+1).padStart(2,'0')+'</span><span>'+p.chip+'</span>';
+    b.addEventListener('click', function(){ closeMenu(); goToSection(p.x); });
+    drawerList.appendChild(b);
+  });
+  (function(){
+    var b=document.createElement('button');
+    b.type='button'; b.dataset.x=MAX_X;
+    b.innerHTML='<span class="idx">'+String(POINTS.length+1).padStart(2,'0')+'</span><span>Contact</span>';
+    b.addEventListener('click', function(){ closeMenu(); goToSection(MAX_X); });
+    drawerList.appendChild(b);
+  })();
 
-    // Hero -> curve fade: hidden at the very start, fully in by the time you
-    // reach the first point, and it simply stays — it never disappears again.
-    var curveOpacity = Math.max(0, Math.min(1, (progress - 0.15) / 0.35));
+  function openMenu(){ menuOpen=true; document.body.classList.add('menu-open'); menuBtn.setAttribute('aria-expanded','true'); }
+  function closeMenu(){ menuOpen=false; document.body.classList.remove('menu-open'); menuBtn.setAttribute('aria-expanded','false'); }
+  menuBtn.addEventListener('click', function(){ menuOpen?closeMenu():openMenu(); });
+  scrim.addEventListener('click', closeMenu);
 
-    if (curveGroup){
-      var offsetX = w/2 - progress*w*ZOOM;
-      curveGroup.setAttribute('transform', 'translate(' + offsetX + ',0)');
-      curveGroup.style.opacity = curveOpacity;
-    }
+  /* ============ portal into a point ============ */
 
-    // Chips ride along with their dot (same pan math), offset to whichever
-    // side keeps them clear of the marker, and dim as they drift off-screen.
-    POINTS.forEach(function(p, i){
-      var chip = chipEls[i];
-      var absD = Math.abs(p.x - progress);
-      if (absD > 1.6 || curveOpacity < 0.02){
-        chip.style.opacity = 0;
-        return;
-      }
-      var sx = w/2 + (p.x - progress) * w * ZOOM;
-      var sy = CENTER_Y - Ytrain[p.x - 1]*AMPLITUDE + CHIP_SIDE[p.x - 1] * 46;
-      chip.style.transform = 'translate(' + sx + 'px,' + sy + 'px) translate(-50%,-50%)';
-      chip.style.opacity = curveOpacity * Math.max(0.2, 1 - absD/1.6);
-    });
-
-    slides.forEach(function(s, i){
-      var delta = i - progress;
-      var absD = Math.abs(delta);
-      var inner = slideInners[i];
-      if (!inner) return;
-      if (absD > 0.4){
-        inner.style.opacity = 0;
-      } else {
-        var t = 1 - absD/0.4;
-        inner.style.opacity = t;
-        inner.style.transform = reduceMotion ? 'none' : ('translateY(' + (delta*50) + 'px) scale(' + (0.92 + t*0.08) + ')');
-      }
-    });
-
-    if (!heroHintHidden && progress > 0.06){
-      heroHintHidden = true;
-      if (heroHint) heroHint.classList.add('hidden');
-    }
-
-    requestAnimationFrame(updateContinuous);
-  }
-
-  // ---------- point-entry transition: click a title, dive into its point ----------
-  function pointScreenPos(x){
-    var w = window.innerWidth;
-    var progress = viewport.scrollLeft / w;
-    return {
-      x: w/2 + (x - progress) * w * ZOOM,
-      y: CENTER_Y - Ytrain[x - 1] * AMPLITUDE
-    };
+  function coverScale(pos){
+    var w=window.innerWidth,h=window.innerHeight;
+    var far=Math.max(Math.hypot(pos.x,pos.y), Math.hypot(w-pos.x,pos.y),
+                     Math.hypot(pos.x,h-pos.y), Math.hypot(w-pos.x,h-pos.y));
+    return (far/18)*1.06;   // portal radius is 18px at scale 1
   }
 
   function onChipClick(x){
-    if (detailOpen || isAnimating) return;
-    var nearest = Math.round(viewport.scrollLeft / window.innerWidth);
-    if (nearest !== x){
-      goTo(x, function(){ openDetail(x); });
-    } else {
-      openDetail(x);
-    }
+    if(detailOpen || scripted) return;
+    if(Math.abs(camX-x)>0.02){ animateCam(x, 520, function(){ openDetail(x); }); }
+    else { openDetail(x); }
   }
 
-  var openIndex = null;
-
   function openDetail(x){
-    if (detailOpen) return;
-    detailOpen = true;
-    openIndex = x;
-    var data = POINTS[x - 1];
-    detailBody.innerHTML = '<div class="detail-image"></div><h2>' + data.title + '</h2>' + data.body;
-
-    if (reduceMotion){
-      portal.classList.add('open');
-      portal.style.left = '50%';
-      portal.style.top = '50%';
-      portal.style.width = '300vmax';
-      portal.style.height = '300vmax';
-      detailOverlay.classList.add('visible');
-      return;
+    if(detailOpen) return;
+    detailOpen=true; openX=x;
+    var p=POINTS[x-1];
+    var nextIdx = x < POINTS.length ? x+1 : 1;
+    var nextP = POINTS[nextIdx-1];
+    detailBody.innerHTML =
+      '<div class="detail-figure" style="background:'+p.hue+'"></div>'+
+      '<div class="detail-kicker">'+p.kicker+'</div>'+
+      '<h2>'+p.title+'</h2>'+p.body+
+      '<button id="detail-next" type="button"><span><span class="lbl">Next</span>'+nextP.chip+'</span><span>→</span></button>';
+    detailOverlay.scrollTop=0;
+    Array.prototype.forEach.call(detailBody.children, function(el,i){
+      el.style.animationDelay = (0.06*i + 0.1)+'s';
+    });
+    var nextBtn=document.getElementById('detail-next');
+    if(nextBtn){
+      nextBtn.addEventListener('click', function(){
+        closeDetail();
+        setTimeout(function(){ animateCam(nextIdx, 620, function(){ openDetail(nextIdx); }); }, 620);
+      });
     }
 
-    var pos = pointScreenPos(x);
-    portal.style.transition = 'none';
-    portal.style.left = pos.x + 'px';
-    portal.style.top = pos.y + 'px';
-    portal.style.width = '18px';
-    portal.style.height = '18px';
+    var pos=dotScreenPos(x);
+    portal.style.left=pos.x+'px';
+    portal.style.top=pos.y+'px';
+
+    if(reduceMotion){
+      portal.classList.add('open');
+      portal.style.transition='none';
+      portal.style.transform='scale('+coverScale(pos)+')';
+      detailOverlay.classList.add('visible');
+      detailClose.classList.add('on');
+      return;
+    }
+    portal.style.transition='none';
+    portal.style.transform='scale(0)';
     portal.classList.add('open');
-    portal.getBoundingClientRect(); // force reflow before transitioning
-    portal.style.transition = 'left 0.7s cubic-bezier(.16,.84,.32,1), top 0.7s cubic-bezier(.16,.84,.32,1), width 0.7s cubic-bezier(.16,.84,.32,1), height 0.7s cubic-bezier(.16,.84,.32,1)';
+    portal.getBoundingClientRect();
+    portal.style.transition='transform 0.72s cubic-bezier(.16,.84,.32,1)';
     requestAnimationFrame(function(){
-      requestAnimationFrame(function(){
-        portal.style.left = '50%';
-        portal.style.top = '50%';
-        portal.style.width = '300vmax';
-        portal.style.height = '300vmax';
-      });
+      requestAnimationFrame(function(){ portal.style.transform='scale('+coverScale(pos)+')'; });
     });
-    setTimeout(function(){ detailOverlay.classList.add('visible'); }, 480);
+    setTimeout(function(){ detailOverlay.classList.add('visible'); detailClose.classList.add('on'); }, 500);
   }
 
   function closeDetail(){
-    if (!detailOpen) return;
-    detailOpen = false;
+    if(!detailOpen) return;
+    detailOpen=false;
     detailOverlay.classList.remove('visible');
-
-    if (reduceMotion){
-      portal.classList.remove('open');
-      openIndex = null;
-      return;
-    }
-
-    var x = openIndex;
+    detailClose.classList.remove('on');
+    var x=openX;
+    if(reduceMotion){ portal.classList.remove('open'); portal.style.transform='scale(0)'; openX=null; return; }
     setTimeout(function(){
-      var pos = pointScreenPos(x);
-      portal.style.left = pos.x + 'px';
-      portal.style.top = pos.y + 'px';
-      portal.style.width = '18px';
-      portal.style.height = '18px';
-    }, 180);
-    setTimeout(function(){
-      portal.classList.remove('open');
-      openIndex = null;
-    }, 900);
+      var pos=dotScreenPos(x);      // re-anchor exactly on the datapoint
+      portal.style.left=pos.x+'px';
+      portal.style.top=pos.y+'px';
+      portal.style.transform='scale(0)';
+    }, 170);
+    setTimeout(function(){ portal.classList.remove('open'); openX=null; }, 950);
   }
+  detailClose.addEventListener('click', closeDetail);
 
-  detailCloseBtn.addEventListener('click', closeDetail);
+  /* ============ input ============ */
 
-  // ---------- input ----------
-  viewport.addEventListener('wheel', function(e){
-    if (detailOpen) return;
+  // Listener sits on window (not the stage) so it still fires over the hero,
+  // the chips and the kernel panel; deltaMode is normalised so a trackpad's
+  // small per-event deltas move as far as a mouse wheel's large ones.
+  window.addEventListener('wheel', function(e){
+    if(detailOpen || menuOpen || scripted) return;
+    if(kernelPanel.contains(e.target)) return;
     e.preventDefault();
-    if (isAnimating) return;
-    var delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    if (delta > 15) goTo(currentIndex + 1);
-    else if (delta < -15) goTo(currentIndex - 1);
-  }, { passive: false });
+    var dy = e.deltaY, dx = e.deltaX;
+    if(e.deltaMode === 1){ dy *= 16; dx *= 16; }        // lines -> px
+    else if(e.deltaMode === 2){ dy *= 400; dx *= 400; } // pages -> px
+    var d = Math.abs(dy) > Math.abs(dx) ? dy : dx;
+    targetCam = clamp(targetCam + d*0.0045, MIN_X, MAX_X);
+  }, { passive:false });
+
+  var dragging=false, dragStartX=0, dragStartCam=0;
+  stage.addEventListener('pointerdown', function(e){
+    if(detailOpen || menuOpen || scripted) return;
+    dragging=true; dragStartX=e.clientX; dragStartCam=targetCam;
+    stage.classList.add('dragging');
+    stage.setPointerCapture(e.pointerId);
+  });
+  stage.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    targetCam = clamp(dragStartCam - (e.clientX-dragStartX)/PX_PER_X, MIN_X, MAX_X);
+    camX = targetCam;
+  });
+  function endDrag(e){
+    if(!dragging) return;
+    dragging=false;
+    stage.classList.remove('dragging');
+    if(e && e.pointerId!==undefined && stage.hasPointerCapture && stage.hasPointerCapture(e.pointerId)){
+      stage.releasePointerCapture(e.pointerId);
+    }
+  }
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
 
   window.addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && detailOpen){ closeDetail(); e.preventDefault(); return; }
-    if (detailOpen || isAnimating) return;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown'){
-      goTo(currentIndex + 1); e.preventDefault();
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp'){
-      goTo(currentIndex - 1); e.preventDefault();
+    if(e.key==='Escape'){
+      if(detailOpen){ closeDetail(); e.preventDefault(); return; }
+      if(menuOpen){ closeMenu(); return; }
     }
+    if(detailOpen || menuOpen || scripted) return;
+    if(e.key==='ArrowRight'||e.key==='PageDown'){ targetCam=clamp(Math.round(targetCam)+1,MIN_X,MAX_X); e.preventDefault(); }
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){ targetCam=clamp(Math.round(targetCam)-1,MIN_X,MAX_X); e.preventDefault(); }
+    else if(e.key==='Home'){ targetCam=MIN_X; e.preventDefault(); }
+    else if(e.key==='End'){ targetCam=MAX_X; e.preventDefault(); }
   });
 
-  var scrollDebounce;
-  viewport.addEventListener('scroll', function(){
-    clearTimeout(scrollDebounce);
-    scrollDebounce = setTimeout(function(){
-      if (!isAnimating){
-        currentIndex = Math.round(viewport.scrollLeft / window.innerWidth);
-      }
-    }, 120);
-  }, { passive: true });
+  /* ============ hyperparameter sliders ============ */
 
-  var resizeTimer;
-  window.addEventListener('resize', function(){
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function(){
-      layout();
-      viewport.scrollTo({ left: currentIndex * window.innerWidth, behavior: 'auto' });
-      primeReveal();
-    }, 150);
+  function onSliderInput(){
+    lengthscale=parseFloat(lsSlider.value);
+    sigmaF2=parseFloat(sfSlider.value);
+    solveGP(false);          // mean + band update live
+    redrawCurve();
+    updateKernelMatrix();
+  }
+  function onSliderCommit(){
+    solveGP(true);           // regenerate the faint posterior samples on release
+    redrawCurve();
+  }
+  [lsSlider,sfSlider].forEach(function(el){
+    el.addEventListener('input', onSliderInput);
+    el.addEventListener('change', onSliderCommit);
+    el.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
   });
 
-  function primeReveal(){
-    if (reduceMotion){
-      samplePath.style.strokeDasharray = 'none';
-      samplePath.style.strokeDashoffset = 0;
-      return;
-    }
-    samplePath.style.transition = 'none';
-    samplePath.style.strokeDasharray = totalLen;
-    samplePath.style.strokeDashoffset = totalLen;
-    samplePath.getBoundingClientRect();
-    samplePath.style.transition = 'stroke-dashoffset 2.4s cubic-bezier(.2,.7,.2,1)';
-    requestAnimationFrame(function(){
-      requestAnimationFrame(function(){
-        samplePath.style.strokeDashoffset = 0;
-      });
-    });
-  }
-
-  window.addEventListener('load', function(){
-    initGP();
-    layout();
-    primeReveal();
-    updateContinuous();
-    requestAnimationFrame(function(){ svg.classList.add('ready'); });
-  });
-})();
-</script>
-
-</body>
-</html>    font-weight: 800;
-    letter-spacing: -0.02em;
-    line-height: 1.02;
-    margin: 0 0 0.3em;
-    color: var(--ink);
-  }
-
-  p{ margin: 0 0 0.6em; }
-
-  a{ color: inherit; }
-
-  .viewport{
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    position: relative;
-  }
-  .viewport::-webkit-scrollbar{ display: none; }
-
-  .track{
-    display: flex;
-    height: 100vh;
-    height: 100dvh;
-    position: relative;
-  }
-
-  #curve-svg{
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw;
-    height: 100vh;
-    pointer-events: none;
-    z-index: 1;
-    opacity: 0;
-    transition: opacity 1.1s ease;
-  }
-  #curve-svg.ready{ opacity: 1; }
-
-  #sample-path{ transition: filter 0.45s ease; }
-  #sample-path.traveling{
-    filter: drop-shadow(0 0 10px var(--acid)) drop-shadow(0 0 26px rgba(255,140,140,0.55));
-  }
-
-  .glow{
-    position: fixed;
-    left: 50%;
-    top: 0;
-    width: 60vmax;
-    height: 60vmax;
-    margin-left: -30vmax;
-    margin-top: -30vmax;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,140,140,0.20), rgba(77,201,255,0.08) 55%, transparent 75%);
-    filter: blur(20px);
-    pointer-events: none;
-    z-index: 0;
-    will-change: transform;
-  }
-
-  #mean-path{ stroke: var(--mean); stroke-width: 2; stroke-dasharray: 2 9; fill: none; stroke-linecap: round; }
-
-  .dot{
-    fill: var(--bg);
-    stroke: var(--acid);
-    stroke-width: 3px;
-    filter: drop-shadow(0 0 8px var(--acid));
-    transform-box: fill-box;
-    transform-origin: center;
-    transition: transform 0.3s cubic-bezier(.2,.8,.2,1);
-  }
-  .dot.active{ transform: scale(1.55); }
-
-  .pulse-ring{
-    fill: none;
-    stroke: var(--acid);
-    stroke-width: 2px;
-    opacity: 0;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-  .pulse-ring.pulsing{ animation: pulse-ring 2.1s ease-out infinite; }
-  @keyframes pulse-ring{
-    0%{ transform: scale(1); opacity: 0.5; }
-    100%{ transform: scale(2.4); opacity: 0; }
-  }
-
-  .vignette{
-    position: fixed;
-    inset: 0;
-    z-index: 4;
-    pointer-events: none;
-    background: radial-gradient(ellipse at center, transparent 42%, rgba(4,10,24,0.55) 100%);
-  }
-
-  .slide{
-    flex: 0 0 100vw;
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    scroll-snap-align: start;
-    position: relative;
-    padding: 7vh 7vw;
-    display: flex;
-    flex-direction: column;
-  }
-  .slide.text-bottom{ justify-content: flex-end; }
-  .slide.text-top{ justify-content: flex-start; }
-  .slide.text-center{ justify-content: center; }
-
-  .slide-inner{
-    position: relative;
-    z-index: 2;
-    max-width: 660px;
-    will-change: transform, opacity;
-  }
-
-  .hero-hint{
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: var(--ink-faint);
-    margin-top: 1.5em;
-    opacity: 1;
-    transition: opacity 0.7s ease;
-  }
-  .hero-hint.hidden{ opacity: 0; }
-  .hero-hint .chevron{ display: inline-block; animation: nudge 1.6s ease-in-out infinite; }
-  @keyframes nudge{
-    0%, 100%{ transform: translateX(0); }
-    50%{ transform: translateX(6px); }
-  }
-
-  .hero h1{
-    font-size: clamp(3rem, 7.5vw, 6.2rem);
-  }
-  .hero .role{
-    font-weight: 700;
-    font-size: clamp(1.1rem, 2.3vw, 1.6rem);
-    color: var(--bright);
-    margin: 0 0 0.5em;
-  }
-  .hero .tagline{
-    font-weight: 500;
-    font-size: clamp(1rem, 1.6vw, 1.25rem);
-    color: var(--ink-dim);
-    margin: 0 0 1.4em;
-  }
-
-  .formula{
-    font-weight: 500;
-    font-size: 0.82rem;
-    color: var(--ink-faint);
-  }
-
-  .slide h2{ font-size: clamp(2.2rem, 5.4vw, 4rem); }
-
-  .slide p{
-    font-weight: 500;
-    font-size: clamp(1.05rem, 1.7vw, 1.3rem);
-    line-height: 1.5;
-    color: var(--ink-dim);
-    max-width: 50ch;
-  }
-
-  .entry + .entry{ margin-top: 1em; }
-  .entry .meta{
-    display: block;
-    font-weight: 700;
-    font-size: 0.9rem;
-    color: var(--bright);
-    margin-bottom: 0.15em;
-  }
-  .entry h3{
-    font-weight: 700;
-    font-size: clamp(1.15rem, 2vw, 1.5rem);
-    margin: 0 0 0.1em;
-  }
-  .entry p{ font-size: clamp(0.98rem, 1.4vw, 1.15rem); }
-
-  a.link{
-    display: inline-block;
-    color: var(--acid);
-    font-weight: 700;
-    text-decoration: underline;
-    text-underline-offset: 4px;
-    margin-top: 0.3em;
-  }
-
-  .skills-grid{ margin: 0; }
-  .skills-grid dt{
-    font-weight: 700;
-    font-size: 0.95rem;
-    color: var(--bright);
-    margin-top: 0.8em;
-  }
-  .skills-grid dt:first-child{ margin-top: 0; }
-  .skills-grid dd{
-    margin: 0.1em 0 0;
-    font-weight: 600;
-    font-size: clamp(1.05rem, 1.7vw, 1.3rem);
-    color: var(--ink-dim);
-  }
-
-  .outro .links{
-    display: flex;
-    flex-direction: column;
-    gap: 0.5em;
-    margin: 0.6em 0 1.2em;
-  }
-  .outro .links a{
-    font-weight: 800;
-    font-size: clamp(1.2rem, 2.4vw, 1.7rem);
-    text-decoration: none;
-    color: var(--acid);
-    width: fit-content;
-  }
-  .outro .links a:hover{ color: var(--bright); }
-  .outro .footnote{
-    font-weight: 500;
-    font-size: 0.95rem;
-    color: var(--ink-faint);
-    max-width: 46ch;
-  }
-
-  @media (max-width: 760px){
-    .slide{ padding: 9vh 6vw; }
-  }
-
-  @media (prefers-reduced-motion: reduce){
-    #curve-svg{ transition: none; }
-    .dot{ transition: none; }
-    .pulse-ring{ display: none; }
-    .hero-hint .chevron{ animation: none; }
-  }
-</style>
-</head>
-<body>
-
-<div class="vignette"></div>
-<div class="glow" id="glow"></div>
-<svg id="curve-svg" xmlns="http://www.w3.org/2000/svg">
-  <g id="curve-group">
-    <path id="band-path" fill="var(--band)"></path>
-    <path id="mean-path"></path>
-    <path id="sample-path" fill="none" stroke="var(--acid)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>
-    <g id="dots"></g>
-  </g>
-</svg>
-
-<div class="viewport" id="viewport">
-  <div class="track" id="track">
-
-    <header class="slide hero text-bottom" id="hero">
-      <div class="slide-inner">
-        <h1>Luca Pellegrini</h1>
-        <p class="role">MSc in Artificial Intelligence — Politecnico di Milano</p>
-        <p class="tagline">i live and learn.</p>
-        <p class="formula">f(x) ~ GP(0, k) &nbsp; k(x, x′) = σ² exp(−(x−x′)² / 2ℓ²)</p>
-        <div class="hero-hint" id="heroHint"><span>scroll to explore</span><span class="chevron">→</span></div>
-      </div>
-    </header>
-
-    <section class="slide" data-x="1" id="education">
-      <div class="slide-inner">
-        <h2>Education</h2>
-        <div class="entry">
-          <span class="meta">Sep. 2025 – Present</span>
-          <h3>Politecnico di Milano</h3>
-          <p>MSc in Computer Science and Engineering, Artificial Intelligence track.</p>
-        </div>
-        <div class="entry">
-          <span class="meta">Sep. 2021 – Jul. 2024</span>
-          <h3>Università di Bologna</h3>
-          <p>BSc in Management Engineering. Final mark 105/110.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="slide" data-x="2" id="proj-univ">
-      <div class="slide-inner">
-        <h2>University Management Competition</h2>
-        <p>Business-game simulation, University of Bologna. Steered corporate strategy, capital budgeting, and operations for a simulated company competing against other universities under market uncertainty.</p>
-      </div>
-    </section>
-
-    <section class="slide" data-x="3" id="proj-thesis">
-      <div class="slide-inner">
-        <h2>Undergraduate Thesis</h2>
-        <p>Advised by Prof. Wilma Penzo (DISI, University of Bologna). Evaluated AutoML pipelines as decision-support tools for failure prediction in Porto's metropolitan transport system, weighing automated modeling against domain-guided feature engineering across more than 10.7 million sensor readings.</p>
-      </div>
-    </section>
-
-    <section class="slide" data-x="4" id="proj-lpbf">
-      <div class="slide-inner">
-        <h2>In-Situ Monitoring of Laser Powder Bed Fusion</h2>
-        <p>Politecnico di Milano. Modeled stochastic melt-pool thermal dynamics from non-stationary dual-wavelength pyrometry data, then built spatio-temporal statistical control charts to catch process instability before it became a defect.</p>
-      </div>
-    </section>
-
-    <section class="slide" data-x="5" id="proj-mesos">
-      <div class="slide-inner">
-        <h2>Mesos</h2>
-        <p>A distributed Java implementation of a board game, architected end-to-end with MVC and OOP patterns. The server runs over multithreaded TCP sockets with a custom message-passing protocol and error recovery, with both CLI and GUI clients backed by JUnit test suites.</p>
-        <a class="link" href="https://github.com/Albi0607/ing-sw-2026-Zonzin-Pellegrini-Samarani-Roveda" target="_blank" rel="noopener">View the code</a>
-      </div>
-    </section>
-
-    <section class="slide" data-x="6" id="thesis-abroad">
-      <div class="slide-inner">
-        <h2>Master's Thesis — In Progress</h2>
-        <p>Planning a thesis abroad in NeuroAI, at the intersection of neuroscience and machine learning. In conversation with labs including MIT CBMM, Stanford's NeuroAI Lab, Princeton, and EPFL's Mathis Lab, while working through selection criteria and PoliMi's administrative pathway.</p>
-      </div>
-    </section>
-
-    <section class="slide" data-x="7" id="skills">
-      <div class="slide-inner">
-        <h2>Skills</h2>
-        <dl class="skills-grid">
-          <dt>Languages</dt>
-          <dd>Python, Java, SQL, Cypher, CQL</dd>
-          <dt>Tools</dt>
-          <dd>Git, Linux, Minitab, H2O</dd>
-          <dt>Data systems</dt>
-          <dd>Neo4j, MongoDB, Elasticsearch, Redis, Spark SQL</dd>
-        </dl>
-      </div>
-    </section>
-
-    <section class="slide" data-x="8" id="certifications">
-      <div class="slide-inner">
-        <h2>Certifications</h2>
-        <div class="entry">
-          <span class="meta">Nov. 2024 – Jan. 2025</span>
-          <h3>Associate Data Scientist — DataCamp</h3>
-        </div>
-        <div class="entry">
-          <span class="meta">Oct. 2024</span>
-          <h3>IELTS 7.0, CEFR C1 — British Council</h3>
-        </div>
-      </div>
-    </section>
-
-    <footer class="slide outro text-center" data-x="9" id="contact">
-      <div class="slide-inner">
-        <h2>Get in touch</h2>
-        <p>Past this point the model is mostly guessing — which is exactly where you come in.</p>
-        <div class="links">
-          <a href="mailto:luca4.pellegrini@mail.polimi.it">luca4.pellegrini@mail.polimi.it</a>
-          <a href="https://www.linkedin.com/in/luca-pellegrini-514b93251" target="_blank" rel="noopener">LinkedIn</a>
-          <a href="https://github.com/LucaPelle01" target="_blank" rel="noopener">GitHub</a>
-        </div>
-        <p class="footnote">Outside of models and matrices: cooking, music, reading, football, basketball, and F1. Italian is my native language; English, fluent.</p>
-      </div>
-    </footer>
-
-  </div>
-</div>
-
-<script>
-(function(){
-  "use strict";
-
-  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  // ---------- linear-algebra helpers ----------
-  function zeros(n, m){
-    var A = new Array(n);
-    for (var i=0;i<n;i++){ A[i] = new Array(m).fill(0); }
-    return A;
-  }
-  function kernelMatrix(X1, X2, kfn){
-    var K = zeros(X1.length, X2.length);
-    for (var i=0;i<X1.length;i++){
-      for (var j=0;j<X2.length;j++){ K[i][j] = kfn(X1[i], X2[j]); }
-    }
-    return K;
-  }
-  // A sum of RBF components at different scales is still a valid (PSD) kernel,
-  // but produces much richer, non-linear sample paths than a single RBF —
-  // a broad component sets the overall trend, finer components add texture.
-  // Lengthscales and variances are re-drawn at random on every page load.
-  function makeRandomMixtureKernel(){
-    var comps = [
-      { l: 1.5 + Math.random()*1.3, v: 0.5  + Math.random()*0.35 },  // broad trend
-      { l: 0.55 + Math.random()*0.7, v: 0.15 + Math.random()*0.25 }, // mid detail
-      { l: 0.18 + Math.random()*0.27, v: 0.04 + Math.random()*0.11 } // fine texture
-    ];
-    return function(x1, x2){
-      var d = x1 - x2, sum = 0;
-      for (var c=0; c<comps.length; c++){
-        var l = comps[c].l;
-        sum += comps[c].v * Math.exp(-(d*d)/(2*l*l));
-      }
-      return sum;
-    };
-  }
-  function matMul(A, B){
-    var n = A.length, k = B.length, m = B[0].length;
-    var C = zeros(n, m);
-    for (var i=0;i<n;i++){
-      for (var j=0;j<m;j++){
-        var s = 0;
-        for (var p=0;p<k;p++){ s += A[i][p]*B[p][j]; }
-        C[i][j] = s;
-      }
-    }
-    return C;
-  }
-  function transpose(A){
-    var n = A.length, m = A[0].length;
-    var T = zeros(m, n);
-    for (var i=0;i<n;i++){ for (var j=0;j<m;j++){ T[j][i] = A[i][j]; } }
-    return T;
-  }
-  function invert(A){
-    var n = A.length;
-    var M = A.map(function(row, i){
-      var r = row.slice();
-      for (var j=0;j<n;j++){ r.push(i===j ? 1 : 0); }
-      return r;
-    });
-    for (var col=0; col<n; col++){
-      var pivot = col;
-      for (var r2=col+1; r2<n; r2++){
-        if (Math.abs(M[r2][col]) > Math.abs(M[pivot][col])) pivot = r2;
-      }
-      var tmp = M[col]; M[col] = M[pivot]; M[pivot] = tmp;
-      var pv = M[col][col] || 1e-9;
-      for (var c=0;c<2*n;c++){ M[col][c] /= pv; }
-      for (var r=0;r<n;r++){
-        if (r===col) continue;
-        var factor = M[r][col];
-        for (var c2=0;c2<2*n;c2++){ M[r][c2] -= factor*M[col][c2]; }
-      }
-    }
-    return M.map(function(row){ return row.slice(n); });
-  }
-  function cholesky(A){
-    var n = A.length;
-    var jitter = 1e-6;
-    var L = zeros(n, n);
-    for (var i=0;i<n;i++){
-      for (var j=0;j<=i;j++){
-        var sum = A[i][j];
-        for (var k=0;k<j;k++){ sum -= L[i][k]*L[j][k]; }
-        if (i===j){
-          var val = sum + jitter;
-          L[i][j] = Math.sqrt(Math.max(val, 1e-12));
-        } else {
-          L[i][j] = sum / (L[j][j] || 1e-9);
-        }
-      }
-    }
-    return L;
-  }
-  function randNormalVector(n){
-    var v = new Array(n);
-    for (var i=0;i<n;i++){
-      var u1 = Math.random() || 1e-9, u2 = Math.random();
-      v[i] = Math.sqrt(-2*Math.log(u1)) * Math.cos(2*Math.PI*u2);
-    }
-    return v;
-  }
-
-  function gaussianProcess(Xtrain, Ytrain, Xgrid, kfn, noise){
-    var n = Xtrain.length;
-    var K = kernelMatrix(Xtrain, Xtrain, kfn);
-    for (var i=0;i<n;i++){ K[i][i] += noise; }
-    var Kinv = invert(K);
-
-    var Ks  = kernelMatrix(Xtrain, Xgrid, kfn);
-    var Kss = kernelMatrix(Xgrid, Xgrid, kfn);
-    var KsT = transpose(Ks);
-
-    var Yt = Ytrain.map(function(y){ return [y]; });
-    var mu = matMul(matMul(KsT, Kinv), Yt).map(function(r){ return r[0]; });
-
-    var A = matMul(KsT, Kinv);
-    var B = matMul(A, Ks);
-    var g = Xgrid.length;
-    var cov = zeros(g, g);
-    for (var r=0;r<g;r++){
-      for (var c=0;c<g;c++){
-        cov[r][c] = Kss[r][c] - B[r][c];
-        if (r===c) cov[r][c] += 1e-6;
-      }
-    }
-
-    var variance = new Array(g);
-    for (var d=0; d<g; d++){ variance[d] = Math.max(cov[d][d], 0); }
-
-    var L = cholesky(cov);
-    var z = randNormalVector(g);
-    var sample = new Array(g);
-    for (var row=0; row<g; row++){
-      var s = mu[row];
-      for (var col=0; col<=row; col++){ s += L[row][col]*z[col]; }
-      sample[row] = s;
-    }
-    return { mu: mu, variance: variance, sample: sample };
-  }
-
-  function linspace(a, b, n){
-    var out = new Array(n);
-    for (var i=0;i<n;i++){ out[i] = a + (b-a)*i/(n-1); }
-    return out;
-  }
-
-  function smoothPath(pts){
-    if (pts.length < 3) {
-      return 'M' + pts.map(function(p){ return p[0]+','+p[1]; }).join('L');
-    }
-    var d = 'M' + pts[0][0] + ',' + pts[0][1] + ' ';
-    for (var i=0;i<pts.length-1;i++){
-      var p0 = pts[i-1] || pts[i];
-      var p1 = pts[i];
-      var p2 = pts[i+1];
-      var p3 = pts[i+2] || p2;
-      var c1x = p1[0] + (p2[0]-p0[0])/6;
-      var c1y = p1[1] + (p2[1]-p0[1])/6;
-      var c2x = p2[0] - (p3[0]-p1[0])/6;
-      var c2y = p2[1] - (p3[1]-p1[1])/6;
-      d += 'C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2[0] + ',' + p2[1] + ' ';
-    }
-    return d;
-  }
-
-  // ---------- page/paging state ----------
-  var viewport = document.getElementById('viewport');
-  var track = document.getElementById('track');
-  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
-  var svg = document.getElementById('curve-svg');
-  var curveGroup = document.getElementById('curve-group');
-  var bandPath = document.getElementById('band-path');
-  var meanPath = document.getElementById('mean-path');
-  var samplePath = document.getElementById('sample-path');
-  var dotsGroup = document.getElementById('dots');
-
-  var Xtrain = [1,2,3,4,5,6,7,8];
-  var Ytrain = [0.2,-0.8,0.6,-0.3,0.9,-0.6,0.4,-0.2];
-  var ZOOM = 0.38; // < 1 = zoomed out: several points' worth of curve visible at once
-
-  var svgNS = 'http://www.w3.org/2000/svg';
-  var currentIndex = 0;
-  var isAnimating = false;
-  var totalLen = 0;
-  var dotEls = [];
-  var gpX = null, gpResult = null, gpScale = 1;
-  var samplePxY = [];
-
-  // Draw the random function once per page load: pick fresh, random
-  // lengthscales/variances for the kernel mixture, then sample a posterior
-  // draw. Resizing the window only re-projects this same function to
-  // pixels — it never reshuffles mid-visit.
-  function initGP(){
-    var kfn = makeRandomMixtureKernel();
-    gpX = linspace(-0.35, slides.length - 0.65, 280);
-    gpResult = gaussianProcess(Xtrain, Ytrain, gpX, kfn, 1e-5);
-
-    // Auto-fit: measure how far mean/band/sample actually wander across the
-    // "core" span that holds the timeline points, so wilder random draws
-    // (bigger variance, shorter lengthscales) still land nicely on screen.
-    var coreMax = 0.6;
-    for (var i=0;i<gpX.length;i++){
-      var x = gpX[i];
-      if (x < Xtrain[0]-0.5 || x > Xtrain[Xtrain.length-1]+0.5) continue;
-      var std = Math.sqrt(gpResult.variance[i]);
-      coreMax = Math.max(coreMax, Math.abs(gpResult.mu[i]) + 1.96*std, Math.abs(gpResult.sample[i]));
-    }
-    gpScale = coreMax;
-  }
-
-  function layout(){
-    var w = window.innerWidth;
-    var h = window.innerHeight;
-    var totalW = slides.length * w;
-
-    track.style.width = totalW + 'px';
-    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
-    svg.setAttribute('width', w);
-    svg.setAttribute('height', h);
-
-    var centerY = h * 0.46;
-    var amplitude = (h * 0.40) / gpScale;
-
-    var upperPts = [], lowerPts = [], samplePts = [], meanPts = [];
-    samplePxY = [];
-    for (var i=0;i<gpX.length;i++){
-      var x = gpX[i];
-      var px = x * w * ZOOM;
-      var std = Math.sqrt(gpResult.variance[i]);
-      var upperY = centerY - (gpResult.mu[i] + 1.96*std) * amplitude;
-      var lowerY = centerY - (gpResult.mu[i] - 1.96*std) * amplitude;
-      var sampY  = centerY - gpResult.sample[i] * amplitude;
-      var meanY  = centerY - gpResult.mu[i] * amplitude;
-      upperPts.push([px, upperY]);
-      lowerPts.push([px, lowerY]);
-      samplePts.push([px, sampY]);
-      meanPts.push([px, meanY]);
-      samplePxY.push(sampY);
-    }
-
-    var bandD = smoothPath(upperPts) + ' ' +
-                smoothPath(lowerPts.slice().reverse()).replace(/^M/, 'L') + ' Z';
-    bandPath.setAttribute('d', bandD);
-    meanPath.setAttribute('d', smoothPath(meanPts));
-    samplePath.setAttribute('d', smoothPath(samplePts));
-
-    dotsGroup.innerHTML = '';
-    dotEls = [];
-    Xtrain.forEach(function(x, idx){
-      var px = x * w * ZOOM;
-      var py = centerY - Ytrain[idx]*amplitude;
-
-      var ring = document.createElementNS(svgNS, 'circle');
-      ring.setAttribute('cx', px);
-      ring.setAttribute('cy', py);
-      ring.setAttribute('r', 7);
-      ring.setAttribute('class', 'pulse-ring');
-      dotsGroup.appendChild(ring);
-
-      var circle = document.createElementNS(svgNS, 'circle');
-      circle.setAttribute('cx', px);
-      circle.setAttribute('cy', py);
-      circle.setAttribute('r', 7);
-      circle.setAttribute('class', 'dot');
-      dotsGroup.appendChild(circle);
-
-      dotEls.push({ el: circle, ring: ring, slideIndex: x });
-
-      var slideEl = document.querySelector('.slide[data-x="' + x + '"]');
-      if (slideEl){
-        slideEl.classList.remove('text-top', 'text-bottom');
-        slideEl.classList.add(py < h * 0.5 ? 'text-bottom' : 'text-top');
-      }
-    });
-
-    totalLen = samplePath.getTotalLength();
-  }
-
-  var slideInners = slides.map(function(s){ return s.querySelector('.slide-inner'); });
-  var heroHint = document.getElementById('heroHint');
-  var heroHintHidden = false;
-  var glowEl = document.getElementById('glow');
-
-  // Interpolate the sample curve's pixel-Y at an arbitrary continuous x
-  // (same units as gpX), used to keep the ambient glow riding the curve.
-  function sampleYAt(x){
-    var n = gpX.length;
-    var t = (x - gpX[0]) / (gpX[n-1] - gpX[0]);
-    t = Math.max(0, Math.min(1, t));
-    var idx = t * (n - 1);
-    var i0 = Math.floor(idx), i1 = Math.min(i0 + 1, n - 1);
-    var frac = idx - i0;
-    return samplePxY[i0] + (samplePxY[i1] - samplePxY[i0]) * frac;
-  }
-
-  function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2; }
-
-  function animateScrollTo(targetLeft, duration, onDone){
-    var startLeft = viewport.scrollLeft;
-    var diff = targetLeft - startLeft;
-    if (Math.abs(diff) < 1){ if (onDone) onDone(); return; }
-    var startTime = null;
-    function step(ts){
-      if (startTime === null) startTime = ts;
-      var t = Math.min((ts - startTime) / duration, 1);
-      viewport.scrollLeft = startLeft + diff * easeInOutCubic(t);
-      if (t < 1){ requestAnimationFrame(step); }
-      else if (onDone){ onDone(); }
-    }
-    requestAnimationFrame(step);
-  }
-
-  function goTo(index){
-    index = Math.max(0, Math.min(slides.length - 1, index));
-    currentIndex = index;
-    isAnimating = true;
-    samplePath.classList.add('traveling');
-    function finish(){
-      isAnimating = false;
-      samplePath.classList.remove('traveling');
-    }
-    if (reduceMotion){
-      viewport.scrollLeft = index * window.innerWidth;
-      finish();
-    } else {
-      animateScrollTo(index * window.innerWidth, 820, finish);
-    }
-  }
-
-  function updateContinuous(){
-    var progress = viewport.scrollLeft / window.innerWidth;
-
-    slides.forEach(function(s, i){
-      var delta = i - progress;
-      var absD = Math.abs(delta);
-      var inner = slideInners[i];
-      if (!inner) return;
-      if (absD > 1.3){
-        inner.style.opacity = 0;
+  /* ============ hero typing ============ */
+
+  function runTyping(){
+    var text='i live and learn.';
+    if(reduceMotion){ typedTxt.textContent=text; heroHint.classList.add('on'); return; }
+    var i=0;
+    (function tick(){
+      typedTxt.textContent = text.slice(0, i);
+      i++;
+      if(i<=text.length){
+        var ch = text[i-2];
+        setTimeout(tick, ch===' ' ? 105 : (55 + Math.random()*75));
       } else {
-        inner.style.opacity = Math.max(0, 1 - absD * 1.2);
-        if (reduceMotion){
-          inner.style.transform = 'none';
-        } else {
-          var scaleVal = 1 - Math.min(absD, 1) * 0.07;
-          var driftX = -delta * 16;
-          var driftY = delta * 34;
-          inner.style.transform = 'translate(' + driftX + 'px,' + driftY + 'px) scale(' + scaleVal + ')';
-        }
+        setTimeout(function(){ heroHint.classList.add('on'); }, 420);
       }
-    });
-
-    if (glowEl && gpX){
-      var glowY = sampleYAt(progress);
-      glowEl.style.transform = 'translateY(' + glowY + 'px)';
-    }
-
-    if (curveGroup){
-      var w = window.innerWidth;
-      var offsetX = w/2 - progress*w*ZOOM;
-      curveGroup.setAttribute('transform', 'translate(' + offsetX + ',0)');
-      var curveOpacity = Math.max(0, Math.min(1, (progress - 0.12) / 0.45));
-      curveGroup.style.opacity = curveOpacity;
-      if (glowEl) glowEl.style.opacity = curveOpacity;
-    }
-
-    var nearest = Math.round(progress);
-    dotEls.forEach(function(d){
-      var isActive = d.slideIndex === nearest && Math.abs(d.slideIndex - progress) < 0.5;
-      d.el.classList.toggle('active', isActive);
-      d.ring.classList.toggle('pulsing', isActive);
-    });
-
-    if (!heroHintHidden && progress > 0.06){
-      heroHintHidden = true;
-      if (heroHint) heroHint.classList.add('hidden');
-    }
-
-    requestAnimationFrame(updateContinuous);
+    })();
   }
 
-  viewport.addEventListener('wheel', function(e){
-    e.preventDefault();
-    if (isAnimating) return;
-    var delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    if (delta > 15) goTo(currentIndex + 1);
-    else if (delta < -15) goTo(currentIndex - 1);
-  }, { passive: false });
-
-  window.addEventListener('keydown', function(e){
-    if (isAnimating) return;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown'){
-      goTo(currentIndex + 1); e.preventDefault();
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp'){
-      goTo(currentIndex - 1); e.preventDefault();
-    }
-  });
-
-  var scrollDebounce;
-  viewport.addEventListener('scroll', function(){
-    clearTimeout(scrollDebounce);
-    scrollDebounce = setTimeout(function(){
-      if (!isAnimating){
-        currentIndex = Math.round(viewport.scrollLeft / window.innerWidth);
-      }
-    }, 120);
-  }, { passive: true });
+  /* ============ boot ============ */
 
   var resizeTimer;
   window.addEventListener('resize', function(){
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function(){
-      layout();
-      viewport.scrollTo({ left: currentIndex * window.innerWidth, behavior: 'auto' });
-      primeReveal();
-    }, 150);
+    resizeTimer=setTimeout(redrawCurve, 140);
   });
 
-  function primeReveal(){
-    if (reduceMotion){
-      samplePath.style.strokeDasharray = 'none';
-      samplePath.style.strokeDashoffset = 0;
-      return;
-    }
-    samplePath.style.transition = 'none';
-    samplePath.style.strokeDasharray = totalLen;
-    samplePath.style.strokeDashoffset = totalLen;
-    samplePath.getBoundingClientRect();
-    samplePath.style.transition = 'stroke-dashoffset 2.4s cubic-bezier(.2,.7,.2,1)';
-    requestAnimationFrame(function(){
-      requestAnimationFrame(function(){
-        samplePath.style.strokeDashoffset = 0;
-      });
-    });
-  }
-
-  window.addEventListener('load', function(){
-    initGP();
-    layout();
-    primeReveal();
-    updateContinuous();
-    requestAnimationFrame(function(){ svg.classList.add('ready'); });
-  });
+  lsSlider.value=lengthscale;
+  sfSlider.value=sigmaF2;
+  solveGP(true);
+  redrawCurve();
+  updateKernelMatrix();
+  frame();
+  setTimeout(runTyping, 420);
+  requestAnimationFrame(function(){ svg.classList.add('ready'); });
 })();
 </script>
 
