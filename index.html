@@ -417,13 +417,13 @@
   <div class="inner">
     <div class="open-note"><span class="pip"></span><span>open to collaborations</span></div>
     <h2>Get in touch</h2>
-    <p>Past the last observation the model is mostly guessing — which is exactly where you come in. I'm open to research collaborations, thesis projects and anything at the intersection of machine learning and the messy real world. If you have something in mind, write to me.</p>
+    <p>If you want to collaborate, or just to connect, send me a message!.</p>
     <div class="links">
-      <a href="mailto:luca4.pellegrini@mail.polimi.it">luca4.pellegrini@mail.polimi.it</a>
+      <a href="mailto:luca4.pellegrini@mail.polimi.it">Email</a>
       <a href="https://www.linkedin.com/in/luca-pellegrini-514b93251" target="_blank" rel="noopener">LinkedIn</a>
       <a href="https://github.com/LucaPelle01" target="_blank" rel="noopener">GitHub</a>
     </div>
-    <p class="footnote">Outside of models and matrices: cooking, music, reading, football, basketball, and F1. Italian is my native language; English, fluent.</p>
+    <p class="footnote">Outside of models and matrices: cooking, music, reading, football, basketball, and F1.</p>
   </div>
 </section>
 
@@ -433,11 +433,11 @@
     <div class="keq">σ²·exp( −‖t−t′‖² / 2ℓ² )</div>
     <div class="slider-row">
       <label for="sf-slider"><span>Variance σ²</span><span class="val" id="sf-val">1.00</span></label>
-      <input type="range" id="sf-slider" min="0.35" max="2" step="0.01" value="1">
+      <input type="range" id="sf-slider" min="0.35" max="3" step="0.01" value="1">
     </div>
     <div class="slider-row">
-      <label for="ls-slider"><span>Length ℓ</span><span class="val" id="ls-val">0.60</span></label>
-      <input type="range" id="ls-slider" min="0.24" max="1.1" step="0.005" value="0.6">
+      <label for="ls-slider"><span>Lengthscale ℓ</span><span class="val" id="ls-val">0.60</span></label>
+      <input type="range" id="ls-slider" min="0.24" max="2" step="0.005" value="1">
     </div>
   </div>
   <svg id="kernel-matrix" viewBox="0 0 100 100" preserveAspectRatio="none" shape-rendering="crispEdges"></svg>
@@ -601,33 +601,23 @@
   var POINTS = [
     { x:1, chip:'Education', kicker:'Where it started', title:'Education',
       hue:'linear-gradient(135deg,#ff8c8c,#4dc9ff)', body:
-      '<div class="entry"><span class="meta">Sep. 2025 – Present</span><h3>Politecnico di Milano</h3>' +
-      '<p>MSc in Computer Science and Engineering, Artificial Intelligence track. Coursework centred on reinforcement learning, computational statistics and the theory underpinning modern machine learning — including the Gaussian processes this page is built on.</p></div>' +
+      '<div class="entry"><span class="meta">Sep. 2025 – Present</span><h3>MSc in Artificial Intelligence - Politecnico di Milano</h3>' +
+      '<p></p></div>' +
       '<div class="entry"><span class="meta">Sep. 2021 – Jul. 2024</span><h3>Università di Bologna</h3>' +
-      '<p>BSc in Management Engineering, final mark 105/110. A grounding in operations, statistics and decision-making under uncertainty that still shapes how I frame technical problems.</p></div>' },
+      '<p>Undergraduate Research Thesis:  Data Analysis with H2O for failure prediction in a metropolitan transport system</p></div>'},
 
-    { x:2, chip:'Management Competition', kicker:'Strategy under uncertainty', title:'University Management Competition',
-      hue:'linear-gradient(135deg,#4dc9ff,#8f7bff)', body:
-      '<p>A cross-university business-game simulation run at the University of Bologna, where teams steered a virtual company through several simulated market cycles.</p>' +
-      '<ul><li>Set corporate strategy and pricing against live competitor behaviour.</li>' +
-      '<li>Ran capital budgeting and production planning under demand volatility.</li>' +
-      '<li>Balanced short-term margin against market-share positioning.</li></ul>' },
-
-    { x:3, chip:'Undergrad Thesis', kicker:'AutoML on the metro', title:'Undergraduate Thesis',
+    { x:2, chip:'Undergraduate Thesis', kicker:'AutoML', title:'Undergraduate Thesis',
       hue:'linear-gradient(135deg,#8f7bff,#ff8c8c)', body:
-      '<p>Advised by Prof. Wilma Penzo (DISI, University of Bologna). The question: can AutoML pipelines serve as genuine decision-support for failure prediction in a metropolitan transport system, or does domain knowledge still win?</p>' +
-      '<ul><li>Worked across more than 10.7 million high-frequency sensor readings from the Porto metropolitan system.</li>' +
-      '<li>Deployed and evaluated H2O AutoML pipelines end to end.</li>' +
+      '<p>The question: can AutoML pipelines serve as genuine decision-support for failure prediction in a metropolitan transport system, or does domain knowledge still win?</p>' +
+      '<ul><li>Worked across more than 10.7 million high-frequency sensor readings from a Porto metropolitan system train.</li>' +
       '<li>Weighed automated model search against domain-guided feature engineering, and characterised where each one pays off.</li></ul>' },
 
-    { x:4, chip:'LPBF Monitoring', kicker:'Statistics on a melt pool', title:'In-Situ Monitoring of Laser Powder Bed Fusion',
+    { x:3, chip:'LPBF Monitoring', kicker:'Time Series Analysis', title:'In-Situ Monitoring of LPBF with Dual Pirometry',
       hue:'linear-gradient(135deg,#ff8c8c,#ffc46b)', body:
-      '<p>Politecnico di Milano. Additive manufacturing fails quietly: by the time a defect is visible, the part is already lost. The goal was to catch instability while the build was still running.</p>' +
-      '<ul><li>Modelled stochastic melt-pool thermal dynamics from non-stationary dual-wavelength pyrometry data.</li>' +
-      '<li>Developed, tuned and validated statistical control charts across spatio-temporal layers.</li>' +
-      '<li>Used them for in-process anomaly detection rather than post-hoc inspection.</li></ul>' },
+      '<p>Worked on non-stationary data to model stochastic melt-pool thermal dynamics and detect process instability.</p>' +
+      '<li>Developed, tuned and validated statistical control charts across spatio-temporal layers.</li>'},
 
-    { x:5, chip:'Mesos', kicker:'Distributed systems in Java', title:'Mesos',
+    { x:4, chip:'Mesos', kicker:'Distributed systems in Java', title:'Mesos',
       hue:'linear-gradient(135deg,#ffc46b,#4dc9ff)', body:
       '<p>A full-stack, distributed Java implementation of a board game, built end to end at Politecnico di Milano.</p>' +
       '<ul><li>Architected with MVC and OOP design patterns to keep domain logic cleanly abstracted.</li>' +
@@ -635,15 +625,14 @@
       '<li>Both CLI and GUI clients, backed by JUnit test suites.</li></ul>' +
       '<a class="link" href="https://github.com/Albi0607/ing-sw-2026-Zonzin-Pellegrini-Samarani-Roveda" target="_blank" rel="noopener">View the code on GitHub</a>' },
 
-    { x:6, chip:'Skills', kicker:'Toolkit', title:'Skills',
+    { x:5, chip:'Skills', kicker:'Toolkit', title:'Skills',
       hue:'linear-gradient(135deg,#8f7bff,#4dc9ff)', body:
       '<dl class="skills-grid">' +
       '<dt>Programming &amp; query languages</dt><dd>Python, Java, SQL, Cypher (advanced) · CQL (intermediate)</dd>' +
       '<dt>Tools &amp; frameworks</dt><dd>Git (advanced), Linux (intermediate), Minitab, H2O</dd>' +
-      '<dt>Databases &amp; systems</dt><dd>Neo4j, MongoDB, Elasticsearch, Redis, Spark SQL</dd>' +
-      '<dt>Languages</dt><dd>Italian (native) · English (fluent, IELTS 7.0 / C1)</dd></dl>' },
+      '<dt>Databases &amp; systems</dt><dd>Neo4j, MongoDB, Elasticsearch, Redis, Spark SQL</dd>'},
 
-    { x:7, chip:'Certifications', kicker:'On paper', title:'Certifications',
+    { x:6, chip:'Certifications', kicker:'On paper', title:'Certifications',
       hue:'linear-gradient(135deg,#ffc46b,#ff8c8c)', body:
       '<div class="entry"><span class="meta">Nov. 2024 – Jan. 2025</span><h3>Associate Data Scientist — DataCamp</h3>' +
       '<p>Practical data science track covering data manipulation, exploratory analysis and supervised learning in Python.</p></div>' +
