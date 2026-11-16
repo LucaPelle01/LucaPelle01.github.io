@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="it" data-dark="false">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Luca Pellegrini</title>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Roboto:wght@400&display=swap"
+    rel="stylesheet"
+  >
+
+  <style>
+    :root {
+      --background: #fafafa;
+      --foreground: #171717;
+      --edge: rgba(0, 0, 0, .17);
+      --glass: rgba(255, 255, 255, .8);
+    }
+
+    :root[data-dark="true"] {
+      --background: #111111;
+      --foreground: #eeeeee;
+      --edge: rgba(255, 255, 255, .25);
+      --glass: rgba(255, 255, 255, .15);
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    body {
+      margin: 0;
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: "Roboto", "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    main {
+      width: min(546px, calc(100% - 32px));
+      padding: 40px 0;
+      text-align: center;
+    }
+
+    #theme {
+      width: 44px;
+      height: 44px;
+      margin-bottom: 12px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: inherit;
+      font-size: 22px;
+      cursor: pointer;
+      opacity: .7;
+    }
+
+    #theme:hover { opacity: 1; }
+
+    #fluid-stage {
+      position: relative;
+      display: block;
+      width: 100%;
+      aspect-ratio: 2.1;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      background: transparent;
+      touch-action: none;
+    }
+
+    #fluid-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #fluid-cursor {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 10.47619%;
+      aspect-ratio: 1;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      border: 1px solid var(--edge);
+      border-radius: 50%;
+      background: linear-gradient(
+        135deg,
+        var(--glass),
+        transparent 48%,
+        rgba(127, 127, 127, .08)
+      );
+      box-shadow:
+        inset 1px 1px 2px rgba(255, 255, 255, .35),
+        inset -2px -3px 7px rgba(127, 127, 127, .06),
+        0 5px 16px rgba(0, 0, 0, .06);
+    }
+
+    h1 {
+      margin: 20px 0 0;
+      font-size: clamp(17px, 4vw, 21px);
+      font-weight: 400;
+      line-height: 1.65;
+      letter-spacing: .035em;
+    }
+
+    h1 span { display: block; }
+
+    #status {
+      margin: 16px 0 0;
+      font-size: 13px;
+      opacity: .65;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <button id="theme" type="button" aria-label="Attiva il tema scuro">
+      <span aria-hidden="true">☾</span>
+    </button>
+
+    <button
+      id="fluid-stage"
+      type="button"
+      aria-label="Simulazione di fluido. Muovi il puntatore oppure usa le frecce della tastiera."
+    >
+      <canvas id="fluid-canvas" aria-hidden="true"></canvas>
+      <span id="fluid-cursor" aria-hidden="true" hidden></span>
+    </button>
+
+    <h1>
+      <span>WORK IN PROGRESS...</span>
+      <span>LUCA</span>
+    </h1>
+
+    <p id="status" role="status" hidden></p>
+  </main>
+
+  <script type="module" src="./fluid-gpu.js"></script>
+</body>
+</html>
