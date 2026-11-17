@@ -6,7 +6,7 @@
   <title>Luca Pellegrini</title>
 
   <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Roboto:wght@400&display=swap"
     rel="stylesheet"
   >
 
@@ -14,11 +14,15 @@
     :root {
       --background: #fafafa;
       --foreground: #171717;
+      --edge: rgba(0, 0, 0, .17);
+      --glass: rgba(255, 255, 255, .8);
     }
 
     :root[data-dark="true"] {
       --background: #111111;
       --foreground: #eeeeee;
+      --edge: rgba(255, 255, 255, .25);
+      --glass: rgba(255, 255, 255, .15);
     }
 
     * { box-sizing: border-box; }
@@ -31,7 +35,7 @@
       place-items: center;
       background: var(--background);
       color: var(--foreground);
-      font-family: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      font-family: "Roboto", "Helvetica Neue", Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
 
@@ -75,12 +79,34 @@
       height: 100%;
     }
 
+    #fluid-cursor {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 10.47619%;
+      aspect-ratio: 1;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      border: 1px solid var(--edge);
+      border-radius: 50%;
+      background: linear-gradient(
+        135deg,
+        var(--glass),
+        transparent 48%,
+        rgba(127, 127, 127, .08)
+      );
+      box-shadow:
+        inset 1px 1px 2px rgba(255, 255, 255, .35),
+        inset -2px -3px 7px rgba(127, 127, 127, .06),
+        0 5px 16px rgba(0, 0, 0, .06);
+    }
+
     h1 {
       margin: 20px 0 0;
-      font-size: clamp(15px, 3.6vw, 19px);
+      font-size: clamp(17px, 4vw, 21px);
       font-weight: 400;
       line-height: 1.65;
-      letter-spacing: .06em;
+      letter-spacing: .035em;
     }
 
     h1 span { display: block; }
@@ -105,6 +131,7 @@
       aria-label="Simulazione di fluido. Muovi il puntatore oppure usa le frecce della tastiera."
     >
       <canvas id="fluid-canvas" aria-hidden="true"></canvas>
+      <span id="fluid-cursor" aria-hidden="true" hidden></span>
     </button>
 
     <h1>
@@ -115,6 +142,6 @@
     <p id="status" role="status" hidden></p>
   </main>
 
-  <script type="module" src="./fluid-gpu.js?v=2"></script>
+  <script type="module" src="./fluid-gpu.js"></script>
 </body>
 </html>
