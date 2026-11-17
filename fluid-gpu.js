@@ -7,7 +7,7 @@ async function startFluid() {
   const canvas = document.getElementById("fluid-canvas");
 
   /* ---------- parametri regolabili ---------- */
-  const COUNT = 24576;          // particelle (multiplo di 512)
+  const COUNT = 512 * 1000;          // particelle (multiplo di 512)
   const PW = 512;
   const PH = Math.ceil(COUNT / PW);
   const SWEEPS = 24;            // sweep SOR rosso/nero (= 2 passate ciascuno)
