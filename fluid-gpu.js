@@ -11,6 +11,9 @@ async function startFluid() {
   const PW = 512;
   const PH = Math.ceil(COUNT / PW);
   const PRESSURE_ITERATIONS = 40;
+  const FLUID_STEP = 1 / 30;
+  const TRAIL_HALF_LIFE = .075;
+  const TRAIL_OPACITY = .07;
 
   const renderer = new Renderer({
     canvas,
@@ -40,6 +43,10 @@ async function startFluid() {
     uPressure: { value: null },
     uDivergence: { value: null },
     uState: { value: null },
+    uTrail: { value: null },
+    uTrailDecay: { value: 0 },
+    uEmission: { value: TRAIL_OPACITY },
+    uViewport: { value: new Float32Array([1, 1]) },
 
     uBall: { value: new Float32Array([1.35, .8, .11]) },
     uBallVelocity: { value: new Float32Array(2) },
@@ -164,15 +171,15 @@ async function startFluid() {
     });
   }
 
-  function target(width, height) {
+  function target(width, height, byte = false) {
     const t = new RenderTarget(gl, {
       width,
       height,
       depth: false,
       stencil: false,
-      type: gl.FLOAT,
+      type: byte ? gl.UNSIGNED_BYTE : gl.FLOAT,
       format: gl.RGBA,
-      internalFormat: gl.RGBA32F,
+      internalFormat: byte ? gl.RGBA8 : gl.RGBA32F,
       minFilter: gl.NEAREST,
       magFilter: gl.NEAREST,
       generateMipmaps: false
@@ -191,10 +198,10 @@ async function startFluid() {
     return t;
   }
 
-  function pair(width, height) {
+  function pair(width, height, byte = false) {
     return {
-      read: target(width, height),
-      write: target(width, height),
+      read: target(width, height, byte),
+      write: target(width, height, byte),
 
       swap() {
         [this.read, this.write] = [this.write, this.read];
@@ -206,11 +213,16 @@ async function startFluid() {
   const pressure = pair(164, 98);
   const particles = pair(PW, PH);
   const divergence = target(164, 98);
+  // Coverage history: two small RGBA8 buffers, no CPU particle histories.
+  const trails = pair(1, 1, true);
 
   const run = (mesh, destination) => renderer.render({
     scene: mesh,
     target: destination,
-    clear: false
+    clear: false,
+    update: false,
+    sort: false,
+    frustumCull: false
   });
 
   const seed = pass(`
@@ -279,7 +291,15 @@ async function startFluid() {
         cell(uVelocity, c + ivec2(0, 1)).g - v.y
       ) / h;
 
-      result = vec4(d * fluid(c), 0., 0., 1.);
+      vec4 s = vec4(
+        fluid(c - ivec2(1, 0)), fluid(c + ivec2(1, 0)),
+        fluid(c - ivec2(0, 1)), fluid(c + ivec2(0, 1))
+      );
+      float isFluidCell = (c.x >= 1 && c.y >= 1 &&
+        c.x <= N.x && c.y <= N.y) ? fluid(c) : 0.;
+      // Cache the obstacle stencil once, instead of 40 times per step.
+      result = vec4(d * fluid(c), isFluidCell,
+        dot(s, vec4(1., 2., 4., 8.)), dot(s, vec4(1.)));
     }
   `);
 
@@ -287,10 +307,8 @@ async function startFluid() {
     void main() {
       ivec2 c = ivec2(gl_FragCoord.xy);
 
-      if (
-        c.x < 1 || c.y < 1 ||
-        c.x > N.x || c.y > N.y || solid(c)
-      ) {
+      vec4 stencil = cell(uDivergence, c);
+      if (stencil.g < .5) {
         result = vec4(0.);
         return;
       }
@@ -300,8 +318,10 @@ async function startFluid() {
       ivec2 b = c - ivec2(0, 1);
       ivec2 t = c + ivec2(0, 1);
 
-      vec4 s = vec4(fluid(l), fluid(r), fluid(b), fluid(t));
-      float count = dot(s, vec4(1.));
+      int mask = int(stencil.b + .5);
+      vec4 s = vec4(float(mask & 1), float((mask >> 1) & 1),
+        float((mask >> 2) & 1), float((mask >> 3) & 1));
+      float count = stencil.a;
 
       vec4 p = vec4(
         cell(uPressure, l).r,
@@ -311,7 +331,7 @@ async function startFluid() {
       );
 
       float value = (
-        dot(s, p) - h * h * cell(uDivergence, c).r
+        dot(s, p) - h * h * stencil.r
       ) / max(count, 1.);
 
       result = vec4(value, 0., 0., 1.);
@@ -407,7 +427,8 @@ async function startFluid() {
     `#version 300 es
     precision highp float;
 
-    uniform vec3 uColor, uBall;
+    uniform vec3 uBall;
+    uniform float uEmission;
 
     in vec2 vPosition;
     in float vFade;
@@ -419,11 +440,11 @@ async function startFluid() {
         discard;
 
       float d = length(gl_PointCoord - .5);
-      float a = (1. - smoothstep(.15, .5, d)) * .27 * vFade;
+      float a = (1. - smoothstep(.15, .5, d)) * uEmission * vFade;
 
       if (a < .001) discard;
 
-      result = vec4(uColor, a);
+      result = vec4(1., 1., 1., a);
     }`,
     true
   );
@@ -441,6 +462,40 @@ async function startFluid() {
     mode: gl.POINTS
   });
 
+  const trailHeader = `#version 300 es
+    precision highp float;
+    precision highp sampler2D;
+    uniform sampler2D uTrail;
+    uniform float uTrailDecay;
+    uniform vec2 uViewport;
+    uniform vec3 uColor, uBall;
+    out vec4 result;
+  `;
+
+  const fadeTrails = new Mesh(gl, {
+    geometry: triangle,
+    program: program(vertex, trailHeader + `
+      void main() {
+        float old = texelFetch(uTrail, ivec2(gl_FragCoord.xy), 0).r;
+        // Explicit rounding down prevents persistent 1/255 ghost pixels.
+        float a = floor(old * uTrailDecay * 255.) / 255.;
+        result = vec4(a);
+      }
+    `)
+  });
+
+  const composite = new Mesh(gl, {
+    geometry: triangle,
+    program: program(vertex, trailHeader + `
+      void main() {
+        float a = texelFetch(uTrail, ivec2(gl_FragCoord.xy), 0).r;
+        vec2 p = vec2(.3) + gl_FragCoord.xy / uViewport * vec2(2.1, 1.);
+        if (distance(p, uBall.xy) < uBall.z) a = 0.;
+        result = vec4(uColor, a);
+      }
+    `)
+  });
+
   const goal = new Float32Array([1.35, .8]);
   const lastBall = new Float32Array(goal);
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -451,22 +506,58 @@ async function startFluid() {
   let visible = true;
   let dead = false;
   let snap = false;
+  let fluidElapsed = 0;
+  let bounds = stage.getBoundingClientRect();
+
+  function placeCursor() {
+    const x = (goal[0] - .3) / 2.1 * bounds.width;
+    const y = (1.3 - goal[1]) * bounds.height;
+    cursor.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+  }
+
+  function clearTrails() {
+    for (const buffer of [trails.read, trails.write]) {
+      renderer.bindFramebuffer({ buffer: buffer.buffer });
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+    renderer.bindFramebuffer({ buffer: null });
+  }
+
+  function accumulateTrails(dt, initial = false) {
+    U.uTrail.value = trails.read.texture;
+    U.uTrailDecay.value = initial ? 0 : Math.pow(.5, dt / TRAIL_HALF_LIFE);
+    run(fadeTrails, trails.write);
+    U.uEmission.value = initial ? .27 : 1 - Math.pow(1 - TRAIL_OPACITY, dt * 60);
+    U.uState.value = particles.read.texture;
+    run(points, trails.write);
+    trails.swap();
+  }
 
   function draw() {
-    U.uState.value = particles.read.texture;
-    renderer.render({ scene: points, clear: true });
+    if (dead) return;
+    U.uTrail.value = trails.read.texture;
+    run(composite, null);
   }
 
   function resize() {
-    const width = stage.getBoundingClientRect().width;
+    if (dead) return;
+    bounds = stage.getBoundingClientRect();
+    const width = bounds.width;
     if (!width) return;
 
+    renderer.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     renderer.setSize(width, width / 2.1);
     U.uDpr.value = renderer.dpr;
+    U.uViewport.value.set([canvas.width, canvas.height]);
+    trails.read.setSize(canvas.width, canvas.height);
+    trails.write.setSize(canvas.width, canvas.height);
+    clearTrails();
+    accumulateTrails(1 / 60, true);
+    placeCursor();
     draw();
   }
 
-  function step(dt) {
+  function stepFluid(dt) {
     const dx = goal[0] - lastBall[0];
     const dy = goal[1] - lastBall[1];
     const jump = snap || Math.hypot(dx, dy) > .25;
@@ -483,7 +574,6 @@ async function startFluid() {
     U.uBall.value[0] = goal[0];
     U.uBall.value[1] = goal[1];
     U.uDt.value = dt;
-    U.uTime.value += dt;
 
     U.uVelocity.value = vel.read.texture;
     run(advect, vel.write);
@@ -502,7 +592,11 @@ async function startFluid() {
     U.uPressure.value = pressure.read.texture;
     run(project, vel.write);
     vel.swap();
+  }
 
+  function stepParticles(dt) {
+    U.uDt.value = dt;
+    U.uTime.value += dt;
     U.uVelocity.value = vel.read.texture;
     U.uState.value = particles.read.texture;
     run(moveParticles, particles.write);
@@ -518,7 +612,14 @@ async function startFluid() {
     if (last === null) last = now - 1000 / 60;
 
     if (now - last >= 1000 / 60 - .5) {
-      step(Math.min((now - last) / 1000, 1 / 30));
+      const dt = Math.min((now - last) / 1000, FLUID_STEP);
+      fluidElapsed += dt;
+      if (fluidElapsed >= FLUID_STEP - .000001) {
+        stepFluid(FLUID_STEP);
+        fluidElapsed = Math.max(0, fluidElapsed - FLUID_STEP);
+      }
+      stepParticles(dt);
+      accumulateTrails(dt);
       last = now;
       draw();
     }
@@ -529,12 +630,17 @@ async function startFluid() {
   function sync() {
     cancelAnimationFrame(raf);
     last = null;
+    fluidElapsed = 0;
+    // Resume without interpreting pointer movement during suspension as an impulse.
+    lastBall.set(goal);
+    snap = true;
 
     if (!dead && visible && !document.hidden && !motion.matches)
       raf = requestAnimationFrame(loop);
   }
 
   function aim(x, y, jump = false) {
+    if (dead) return;
     const ax = Math.max(0, Math.min(1, x));
     const ay = Math.max(0, Math.min(1, y));
 
@@ -544,8 +650,7 @@ async function startFluid() {
     U.uBall.value[0] = goal[0];
     U.uBall.value[1] = goal[1];
 
-    cursor.style.left = `${ax * 100}%`;
-    cursor.style.top = `${ay * 100}%`;
+    placeCursor();
 
     snap = snap || jump;
 
@@ -553,7 +658,7 @@ async function startFluid() {
   }
 
   function pointer(event, jump = false) {
-    const r = stage.getBoundingClientRect();
+    const r = bounds;
 
     if (r.width && r.height) {
       aim(
@@ -564,10 +669,14 @@ async function startFluid() {
     }
   }
 
-  stage.addEventListener("pointerenter", e => pointer(e, true));
+  stage.addEventListener("pointerenter", e => {
+    bounds = stage.getBoundingClientRect();
+    pointer(e, true);
+  });
   stage.addEventListener("pointermove", e => pointer(e));
 
   stage.addEventListener("pointerdown", e => {
+    bounds = stage.getBoundingClientRect();
     if (e.pointerType === "touch")
       stage.setPointerCapture(e.pointerId);
 
@@ -629,7 +738,18 @@ async function startFluid() {
   });
 
   document.addEventListener("visibilitychange", sync);
-  motion.addEventListener("change", sync);
+  motion.addEventListener("change", () => {
+    if (!dead) {
+      clearTrails();
+      accumulateTrails(1 / 60, true);
+      draw();
+    }
+    sync();
+  });
+  window.addEventListener("scroll", () => {
+    bounds = stage.getBoundingClientRect();
+  }, { passive: true, capture: true });
+  window.addEventListener("resize", resize, { passive: true });
 
   new ResizeObserver(resize).observe(stage);
 
@@ -638,9 +758,8 @@ async function startFluid() {
     sync();
   }).observe(stage);
 
+  stepFluid(FLUID_STEP);
   resize();
-  step(1 / 60);
-  draw();
 
   cursor.hidden = false;
   stage.style.cursor = "none";
@@ -657,3 +776,4 @@ startFluid().catch(error => {
   status.hidden = false;
   status.textContent = "Animazione non disponibile su questo dispositivo.";
 });
+
