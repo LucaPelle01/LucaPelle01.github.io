@@ -1,779 +1,241 @@
-async function startFluid() {
-  const {
-    Renderer, Program, Mesh, Triangle, Geometry, RenderTarget
-  } = await import("https://cdn.jsdelivr.net/npm/ogl@1.0.11/+esm");
+import { Fluid, Tracers } from './fluid-core.js?v=flow-2';
 
-  const stage = document.getElementById("fluid-stage");
-  const canvas = document.getElementById("fluid-canvas");
-  const cursor = document.getElementById("fluid-cursor");
+const canvas=document.getElementById('fluid-canvas');
+const stage=document.getElementById('fluid-stage');
+const theme=document.getElementById('theme');
+const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+const SETTINGS={ particles:30000, mobileParticles:9000, trailHalfLife:.24, opacity:.11 };
+const VERTEX=`attribute vec2 p; varying vec2 uv;
+  void main(){uv=p*.5+.5; gl_Position=vec4(p,0.,1.);}`;
+const colors=dark=>dark?{bg:[17/255,17/255,17/255],ink:[232/255,232/255,232/255]}:
+  {bg:[250/255,250/255,250/255],ink:[32/255,32/255,32/255]};
 
-  const COUNT = 120000;
-  const PW = 512;
-  const PH = Math.ceil(COUNT / PW);
-  const PRESSURE_ITERATIONS = 40;
-  const FLUID_STEP = 1 / 30;
-  const TRAIL_HALF_LIFE = .075;
-  const TRAIL_OPACITY = .07;
-
-  const renderer = new Renderer({
-    canvas,
-    webgl: 2,
-    alpha: true,
-    premultipliedAlpha: false,
-    antialias: false,
-    depth: false,
-    stencil: false,
-    dpr: Math.min(window.devicePixelRatio || 1, 1.5)
-  });
-
-  const gl = renderer.gl;
-
-  if (
-    !gl ||
-    typeof gl.texStorage2D !== "function" ||
-    !gl.getExtension("EXT_color_buffer_float")
-  ) {
-    throw new Error("WebGL2 floating-point render targets unavailable.");
-  }
-
-  gl.clearColor(0, 0, 0, 0);
-
-  const U = {
-    uVelocity: { value: null },
-    uPressure: { value: null },
-    uDivergence: { value: null },
-    uState: { value: null },
-    uTrail: { value: null },
-    uTrailDecay: { value: 0 },
-    uEmission: { value: TRAIL_OPACITY },
-    uViewport: { value: new Float32Array([1, 1]) },
-
-    uBall: { value: new Float32Array([1.35, .8, .11]) },
-    uBallVelocity: { value: new Float32Array(2) },
-
-    uDt: { value: 1 / 60 },
-    uTime: { value: 0 },
-    uInit: { value: 0 },
-    uDpr: { value: renderer.dpr },
-    uColor: { value: new Float32Array([.09, .09, .09]) }
-  };
-
-  const vertex = `#version 300 es
-    in vec2 position;
-
-    void main() {
-      gl_Position = vec4(position, 0., 1.);
-    }
-  `;
-
-  /*
-   * Campo di velocità su griglia MAC.
-   * Ogni texel contiene le due componenti su facce sfalsate.
-   * Il dominio include un margine esterno all'area visibile.
-   */
-  const common = `#version 300 es
-    precision highp float;
-    precision highp int;
-    precision highp sampler2D;
-
-    uniform sampler2D uVelocity, uPressure, uDivergence, uState;
-    uniform vec3 uBall;
-    uniform vec2 uBallVelocity;
-    uniform float uDt, uTime;
-    uniform int uInit;
-
-    out vec4 result;
-
-    const ivec2 N = ivec2(162, 96);
-    const float h = 1. / 60.;
-
-    vec4 cell(sampler2D t, ivec2 c) {
-      return texelFetch(t, clamp(c, ivec2(0), N + 1), 0);
-    }
-
-    bool solid(ivec2 c) {
-      if (c.x < 1 || c.y < 1 || c.x > N.x || c.y > N.y)
-        return false;
-
-      return distance((vec2(c) - .5) * h, uBall.xy) < uBall.z;
-    }
-
-    float fluid(ivec2 c) {
-      if (c.x < 1 || c.y < 1 || c.y > N.y)
-        return 0.;
-
-      return solid(c) ? 0. : 1.;
-    }
-
-    vec4 linearSample(sampler2D t, vec2 g) {
-      ivec2 c = ivec2(floor(g));
-      vec2 a = fract(g);
-
-      return mix(
-        mix(cell(t, c), cell(t, c + ivec2(1, 0)), a.x),
-        mix(cell(t, c + ivec2(0, 1)),
-            cell(t, c + ivec2(1, 1)), a.x),
-        a.y
-      );
-    }
-
-    vec2 velocity(vec2 p) {
-      return vec2(
-        linearSample(uVelocity, p / h + vec2(1., .5)).r,
-        linearSample(uVelocity, p / h + vec2(.5, 1.)).g
-      );
-    }
-
-    vec2 boundary(vec2 v, ivec2 c) {
-      if (c.x <= 1) v.x = .55;
-      if (c.x == 0) v.y = 0.;
-      if (c.y <= 1 || c.y > N.y) v.y = 0.;
-      if (c.y == 0 || c.y > N.y) v.x = .55;
-
-      if (solid(c) || solid(c - ivec2(1, 0)))
-        v.x = uBallVelocity.x;
-
-      if (solid(c) || solid(c - ivec2(0, 1)))
-        v.y = uBallVelocity.y;
-
-      return v;
-    }
-
-    float hash(vec2 p) {
-      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-    }
-  `;
-
-  const triangle = new Triangle(gl);
-
-  function program(vs, fs, transparent = false) {
-    const p = new Program(gl, {
-      vertex: vs,
-      fragment: fs,
-      uniforms: U,
-      depthTest: false,
-      depthWrite: false,
-      cullFace: false,
-      transparent
-    });
-
-    if (!gl.getProgramParameter(p.program, gl.LINK_STATUS)) {
-      throw new Error(gl.getProgramInfoLog(p.program));
-    }
-
-    return p;
-  }
-
-  function pass(body) {
-    return new Mesh(gl, {
-      geometry: triangle,
-      program: program(vertex, common + body)
-    });
-  }
-
-  function target(width, height, byte = false) {
-    const t = new RenderTarget(gl, {
-      width,
-      height,
-      depth: false,
-      stencil: false,
-      type: byte ? gl.UNSIGNED_BYTE : gl.FLOAT,
-      format: gl.RGBA,
-      internalFormat: byte ? gl.RGBA8 : gl.RGBA32F,
-      minFilter: gl.NEAREST,
-      magFilter: gl.NEAREST,
-      generateMipmaps: false
-    });
-
-    renderer.bindFramebuffer({ buffer: t.buffer });
-
-    const complete =
-      gl.checkFramebufferStatus(gl.FRAMEBUFFER) ===
-      gl.FRAMEBUFFER_COMPLETE;
-
-    renderer.bindFramebuffer({ buffer: null });
-
-    if (!complete) throw new Error("Incomplete framebuffer.");
-
-    return t;
-  }
-
-  function pair(width, height, byte = false) {
-    return {
-      read: target(width, height, byte),
-      write: target(width, height, byte),
-
-      swap() {
-        [this.read, this.write] = [this.write, this.read];
+class GPURenderer {
+  constructor(gl) {
+    this.gl=gl; this.targets=[]; this.width=0;this.height=0;
+    const compile=(vs,fs)=>{
+      const p=gl.createProgram();
+      for(const [kind,source] of [[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]]){
+        const s=gl.createShader(kind);gl.shaderSource(s,source);gl.compileShader(s);
+        if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));
+        gl.attachShader(p,s);gl.deleteShader(s);
       }
+      gl.linkProgram(p);
+      if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
+      const uniforms={};
+      for(let i=0;i<gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);i++){
+        const name=gl.getActiveUniform(p,i).name;uniforms[name]=gl.getUniformLocation(p,name);
+      }
+      return {p,uniforms,position:gl.getAttribLocation(p,'p')};
     };
+    this.fade=compile(VERTEX,`precision highp float; varying vec2 uv;
+      uniform sampler2D history; uniform float decay;
+      void main(){float a=floor(texture2D(history,uv).r*decay*255.)/255.;gl_FragColor=vec4(a);}`);
+    this.lines=compile(`attribute vec2 p; varying vec2 world;
+      void main(){world=p;gl_Position=vec4(((p-vec2(.3,.25))/vec2(2.4,1.))*2.-1.,0.,1.);}`,
+      `precision mediump float;varying vec2 world;uniform float alpha;uniform vec3 ball;
+      void main(){if(distance(world,ball.xy)<ball.z)discard;gl_FragColor=vec4(vec3(alpha),alpha);}`);
+    this.screen=compile(VERTEX,`precision highp float;varying vec2 uv;
+      uniform sampler2D history;uniform vec3 bg,ink,ball;uniform float pixel;
+      void main(){
+        vec2 world=vec2(.3,.25)+uv*vec2(2.4,1.);
+        float d=distance(world,ball.xy)-ball.z;
+        float edge=smoothstep(0.,.09,uv.x)*smoothstep(0.,.09,1.-uv.x)
+          *smoothstep(0.,.16,uv.y)*smoothstep(0.,.16,1.-uv.y);
+        float a=texture2D(history,uv).r*edge*smoothstep(-pixel,pixel,d);
+        float rim=(1.-smoothstep(0.,pixel*1.1,abs(d)))*.11*edge;
+        gl_FragColor=vec4(mix(bg,ink,max(a,rim)),1.);
+      }`);
+    this.quad=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.quad);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+    this.lineBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.lineBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER,SETTINGS.particles*4*4,gl.DYNAMIC_DRAW);
+    gl.disable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);
   }
-
-  const vel = pair(164, 98);
-  const pressure = pair(164, 98);
-  const particles = pair(PW, PH);
-  const divergence = target(164, 98);
-  // Coverage history: two small RGBA8 buffers, no CPU particle histories.
-  const trails = pair(1, 1, true);
-
-  const run = (mesh, destination) => renderer.render({
-    scene: mesh,
-    target: destination,
-    clear: false,
-    update: false,
-    sort: false,
-    frustumCull: false
-  });
-
-  const seed = pass(`
-    void main() {
-      vec2 c = gl_FragCoord.xy;
-
-      if (uInit == 1) {
-        result = vec4(.55, 0., 0., 1.);
-        return;
-      }
-
-      if (uInit == 2) {
-        vec2 p = vec2(.3) +
-          vec2(2.1, 1.) * vec2(hash(c), hash(c + 19.3));
-
-        if (distance(p, uBall.xy) < uBall.z + .003) {
-          p = uBall.xy +
-            normalize(p - uBall.xy + vec2(.00001, 0.)) *
-            (uBall.z + .003);
-        }
-
-        result = vec4(p, hash(c + 43.7), 0.);
-        return;
-      }
-
-      result = vec4(0.);
-    }
-  `);
-
-  // Avvezione semi-lagrangiana e viscosità.
-  const advect = pass(`
-    void main() {
-      ivec2 c = ivec2(gl_FragCoord.xy);
-
-      vec2 a = (vec2(c) - vec2(1., .5)) * h;
-      vec2 b = (vec2(c) - vec2(.5, 1.)) * h;
-
-      vec2 v = vec2(
-        velocity(a - uDt * velocity(a)).x,
-        velocity(b - uDt * velocity(b)).y
-      );
-
-      vec2 lap =
-          cell(uVelocity, c + ivec2(1, 0)).rg
-        + cell(uVelocity, c - ivec2(1, 0)).rg
-        + cell(uVelocity, c + ivec2(0, 1)).rg
-        + cell(uVelocity, c - ivec2(0, 1)).rg
-        - 4. * cell(uVelocity, c).rg;
-
-      v += .0004 * uDt / (h * h) * lap;
-
-      if (c.x > N.x)
-        v.x = cell(uVelocity, c - ivec2(1, 0)).r;
-
-      result = vec4(boundary(v, c), 0., 1.);
-    }
-  `);
-
-  const divergencePass = pass(`
-    void main() {
-      ivec2 c = ivec2(gl_FragCoord.xy);
-      vec2 v = cell(uVelocity, c).rg;
-
-      float d = (
-        cell(uVelocity, c + ivec2(1, 0)).r - v.x +
-        cell(uVelocity, c + ivec2(0, 1)).g - v.y
-      ) / h;
-
-      vec4 s = vec4(
-        fluid(c - ivec2(1, 0)), fluid(c + ivec2(1, 0)),
-        fluid(c - ivec2(0, 1)), fluid(c + ivec2(0, 1))
-      );
-      float isFluidCell = (c.x >= 1 && c.y >= 1 &&
-        c.x <= N.x && c.y <= N.y) ? fluid(c) : 0.;
-      // Cache the obstacle stencil once, instead of 40 times per step.
-      result = vec4(d * fluid(c), isFluidCell,
-        dot(s, vec4(1., 2., 4., 8.)), dot(s, vec4(1.)));
-    }
-  `);
-
-  const pressurePass = pass(`
-    void main() {
-      ivec2 c = ivec2(gl_FragCoord.xy);
-
-      vec4 stencil = cell(uDivergence, c);
-      if (stencil.g < .5) {
-        result = vec4(0.);
-        return;
-      }
-
-      ivec2 l = c - ivec2(1, 0);
-      ivec2 r = c + ivec2(1, 0);
-      ivec2 b = c - ivec2(0, 1);
-      ivec2 t = c + ivec2(0, 1);
-
-      int mask = int(stencil.b + .5);
-      vec4 s = vec4(float(mask & 1), float((mask >> 1) & 1),
-        float((mask >> 2) & 1), float((mask >> 3) & 1));
-      float count = stencil.a;
-
-      vec4 p = vec4(
-        cell(uPressure, l).r,
-        cell(uPressure, r).r,
-        cell(uPressure, b).r,
-        cell(uPressure, t).r
-      );
-
-      float value = (
-        dot(s, p) - h * h * stencil.r
-      ) / max(count, 1.);
-
-      result = vec4(value, 0., 0., 1.);
-    }
-  `);
-
-  const project = pass(`
-    void main() {
-      ivec2 c = ivec2(gl_FragCoord.xy);
-      vec2 v = cell(uVelocity, c).rg;
-      float p = cell(uPressure, c).r;
-
-      if (fluid(c) * fluid(c - ivec2(1, 0)) > 0.)
-        v.x -= (p - cell(uPressure, c - ivec2(1, 0)).r) / h;
-
-      if (fluid(c) * fluid(c - ivec2(0, 1)) > 0.)
-        v.y -= (p - cell(uPressure, c - ivec2(0, 1)).r) / h;
-
-      result = vec4(boundary(v, c), 0., 1.);
-    }
-  `);
-
-  // Anche le posizioni delle particelle restano sulla GPU.
-  const moveParticles = pass(`
-    void main() {
-      vec4 s = texelFetch(uState, ivec2(gl_FragCoord.xy), 0);
-
-      vec2 mid = s.xy + .5 * uDt * velocity(s.xy);
-      vec2 p = s.xy + uDt * velocity(mid);
-      float age = s.w + uDt;
-
-      if (
-        p.x < .3 || p.x > 2.4 ||
-        p.y < .3 || p.y > 1.3 ||
-        age > 15. ||
-        distance(p, uBall.xy) < uBall.z + .002 ||
-        any(isnan(p))
-      ) {
-        p = vec2(.301, .3 + hash(gl_FragCoord.xy + uTime));
-        age = 0.;
-      }
-
-      result = vec4(p, s.z, age);
-    }
-  `);
-
-  U.uInit.value = 1;
-  run(seed, vel.read);
-  run(seed, vel.write);
-
-  U.uInit.value = 0;
-  run(seed, pressure.read);
-  run(seed, pressure.write);
-
-  U.uInit.value = 2;
-  run(seed, particles.read);
-
-  // Questo array viene creato una sola volta.
-  const ids = Float32Array.from({ length: COUNT }, (_, i) => i);
-
-  const geometry = new Geometry(gl, {
-    aIndex: { size: 1, data: ids }
-  });
-
-  const pointProgram = program(
-    `#version 300 es
-    precision highp float;
-    precision highp int;
-    precision highp sampler2D;
-
-    in float aIndex;
-
-    uniform sampler2D uState;
-    uniform float uDpr;
-
-    out vec2 vPosition;
-    out float vFade;
-
-    void main() {
-      int id = int(aIndex);
-      vec4 s = texelFetch(uState, ivec2(id % 512, id / 512), 0);
-      vec2 p = (s.xy - vec2(.3)) / vec2(2.1, 1.);
-
-      gl_Position = vec4(p * 2. - 1., 0., 1.);
-      gl_PointSize = max(1., uDpr * mix(.65, 1.05, s.z));
-
-      vPosition = s.xy;
-      vFade =
-        smoothstep(0., .08, min(p.x, 1. - p.x)) *
-        smoothstep(0., .12, min(p.y, 1. - p.y));
-    }`,
-
-    `#version 300 es
-    precision highp float;
-
-    uniform vec3 uBall;
-    uniform float uEmission;
-
-    in vec2 vPosition;
-    in float vFade;
-
-    out vec4 result;
-
-    void main() {
-      if (distance(vPosition, uBall.xy) < uBall.z)
-        discard;
-
-      float d = length(gl_PointCoord - .5);
-      float a = (1. - smoothstep(.15, .5, d)) * uEmission * vFade;
-
-      if (a < .001) discard;
-
-      result = vec4(1., 1., 1., a);
-    }`,
-    true
-  );
-
-  pointProgram.setBlendFunc(
-    gl.SRC_ALPHA,
-    gl.ONE_MINUS_SRC_ALPHA,
-    gl.ONE,
-    gl.ONE_MINUS_SRC_ALPHA
-  );
-
-  const points = new Mesh(gl, {
-    geometry,
-    program: pointProgram,
-    mode: gl.POINTS
-  });
-
-  const trailHeader = `#version 300 es
-    precision highp float;
-    precision highp sampler2D;
-    uniform sampler2D uTrail;
-    uniform float uTrailDecay;
-    uniform vec2 uViewport;
-    uniform vec3 uColor, uBall;
-    out vec4 result;
-  `;
-
-  const fadeTrails = new Mesh(gl, {
-    geometry: triangle,
-    program: program(vertex, trailHeader + `
-      void main() {
-        float old = texelFetch(uTrail, ivec2(gl_FragCoord.xy), 0).r;
-        // Explicit rounding down prevents persistent 1/255 ghost pixels.
-        float a = floor(old * uTrailDecay * 255.) / 255.;
-        result = vec4(a);
-      }
-    `)
-  });
-
-  const composite = new Mesh(gl, {
-    geometry: triangle,
-    program: program(vertex, trailHeader + `
-      void main() {
-        float a = texelFetch(uTrail, ivec2(gl_FragCoord.xy), 0).r;
-        vec2 p = vec2(.3) + gl_FragCoord.xy / uViewport * vec2(2.1, 1.);
-        if (distance(p, uBall.xy) < uBall.z) a = 0.;
-        result = vec4(uColor, a);
-      }
-    `)
-  });
-
-  const goal = new Float32Array([1.35, .8]);
-  const lastBall = new Float32Array(goal);
-  const motion = matchMedia("(prefers-reduced-motion: reduce)");
-
-  let dark = false;
-  let raf = 0;
-  let last = null;
-  let visible = true;
-  let dead = false;
-  let snap = false;
-  let fluidElapsed = 0;
-  let bounds = stage.getBoundingClientRect();
-
-  function placeCursor() {
-    const x = (goal[0] - .3) / 2.1 * bounds.width;
-    const y = (1.3 - goal[1]) * bounds.height;
-    cursor.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+  bind(program,buffer){
+    const gl=this.gl;
+    gl.useProgram(program.p);gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+    gl.enableVertexAttribArray(program.position);gl.vertexAttribPointer(program.position,2,gl.FLOAT,false,0,0);
   }
-
-  function clearTrails() {
-    for (const buffer of [trails.read, trails.write]) {
-      renderer.bindFramebuffer({ buffer: buffer.buffer });
-      gl.clear(gl.COLOR_BUFFER_BIT);
-    }
-    renderer.bindFramebuffer({ buffer: null });
+  resize(w,h){
+    const gl=this.gl;
+    this.width=w;this.height=h;
+    for(const t of this.targets){gl.deleteTexture(t.texture);gl.deleteFramebuffer(t.fbo);}
+    this.targets=Array.from({length:2},()=>{
+      const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      const fbo=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texture,0);
+      if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Error('Framebuffer incompleto');
+      gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+      return {texture,fbo};
+    });
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   }
-
-  function accumulateTrails(dt, initial = false) {
-    U.uTrail.value = trails.read.texture;
-    U.uTrailDecay.value = initial ? 0 : Math.pow(.5, dt / TRAIL_HALF_LIFE);
-    run(fadeTrails, trails.write);
-    U.uEmission.value = initial ? .27 : 1 - Math.pow(1 - TRAIL_OPACITY, dt * 60);
-    U.uState.value = particles.read.texture;
-    run(points, trails.write);
-    trails.swap();
+  clear(){
+    const gl=this.gl;gl.clearColor(0,0,0,0);
+    for(const t of this.targets){gl.bindFramebuffer(gl.FRAMEBUFFER,t.fbo);gl.clear(gl.COLOR_BUFFER_BIT);}
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   }
-
-  function draw() {
-    if (dead) return;
-    U.uTrail.value = trails.read.texture;
-    run(composite, null);
+  accumulate(data,dt,ball){
+    const gl=this.gl,[read,write]=this.targets;
+    gl.viewport(0,0,this.width,this.height);gl.bindFramebuffer(gl.FRAMEBUFFER,write.fbo);
+    gl.disable(gl.BLEND);this.bind(this.fade,this.quad);
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,read.texture);
+    gl.uniform1i(this.fade.uniforms.history,0);
+    gl.uniform1f(this.fade.uniforms.decay,Math.pow(.5,dt/SETTINGS.trailHalfLife));
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    this.bind(this.lines,this.lineBuffer);gl.bufferSubData(gl.ARRAY_BUFFER,0,data);
+    gl.uniform3fv(this.lines.uniforms.ball,ball);
+    // Segment length already scales with dt, so opacity must not scale twice.
+    gl.uniform1f(this.lines.uniforms.alpha,SETTINGS.opacity);
+    gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.LINES,0,data.length/2);gl.disable(gl.BLEND);
+    this.targets=[write,read];
   }
-
-  function resize() {
-    if (dead) return;
-    bounds = stage.getBoundingClientRect();
-    const width = bounds.width;
-    if (!width) return;
-
-    renderer.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    renderer.setSize(width, width / 2.1);
-    U.uDpr.value = renderer.dpr;
-    U.uViewport.value.set([canvas.width, canvas.height]);
-    trails.read.setSize(canvas.width, canvas.height);
-    trails.write.setSize(canvas.width, canvas.height);
-    clearTrails();
-    accumulateTrails(1 / 60, true);
-    placeCursor();
-    draw();
+  present(ball,dark){
+    const gl=this.gl,c=colors(dark),u=this.screen.uniforms;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,this.width,this.height);
+    gl.disable(gl.BLEND);this.bind(this.screen,this.quad);
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.targets[0].texture);
+    gl.uniform1i(u.history,0);gl.uniform3fv(u.ball,ball);
+    gl.uniform3fv(u.bg,c.bg);gl.uniform3fv(u.ink,c.ink);gl.uniform1f(u.pixel,1/this.height);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
-
-  function stepFluid(dt) {
-    const dx = goal[0] - lastBall[0];
-    const dy = goal[1] - lastBall[1];
-    const jump = snap || Math.hypot(dx, dy) > .25;
-
-    U.uBallVelocity.value[0] = jump
-      ? 0 : Math.max(-2.5, Math.min(2.5, dx / dt));
-
-    U.uBallVelocity.value[1] = jump
-      ? 0 : Math.max(-2.5, Math.min(2.5, dy / dt));
-
-    lastBall.set(goal);
-    snap = false;
-
-    U.uBall.value[0] = goal[0];
-    U.uBall.value[1] = goal[1];
-    U.uDt.value = dt;
-
-    U.uVelocity.value = vel.read.texture;
-    run(advect, vel.write);
-    vel.swap();
-
-    U.uVelocity.value = vel.read.texture;
-    run(divergencePass, divergence);
-    U.uDivergence.value = divergence.texture;
-
-    for (let i = 0; i < PRESSURE_ITERATIONS; i++) {
-      U.uPressure.value = pressure.read.texture;
-      run(pressurePass, pressure.write);
-      pressure.swap();
-    }
-
-    U.uPressure.value = pressure.read.texture;
-    run(project, vel.write);
-    vel.swap();
-  }
-
-  function stepParticles(dt) {
-    U.uDt.value = dt;
-    U.uTime.value += dt;
-    U.uVelocity.value = vel.read.texture;
-    U.uState.value = particles.read.texture;
-    run(moveParticles, particles.write);
-    particles.swap();
-  }
-
-  function loop(now) {
-    raf = 0;
-
-    if (dead || !visible || document.hidden || motion.matches)
-      return;
-
-    if (last === null) last = now - 1000 / 60;
-
-    if (now - last >= 1000 / 60 - .5) {
-      const dt = Math.min((now - last) / 1000, FLUID_STEP);
-      fluidElapsed += dt;
-      if (fluidElapsed >= FLUID_STEP - .000001) {
-        stepFluid(FLUID_STEP);
-        fluidElapsed = Math.max(0, fluidElapsed - FLUID_STEP);
-      }
-      stepParticles(dt);
-      accumulateTrails(dt);
-      last = now;
-      draw();
-    }
-
-    raf = requestAnimationFrame(loop);
-  }
-
-  function sync() {
-    cancelAnimationFrame(raf);
-    last = null;
-    fluidElapsed = 0;
-    // Resume without interpreting pointer movement during suspension as an impulse.
-    lastBall.set(goal);
-    snap = true;
-
-    if (!dead && visible && !document.hidden && !motion.matches)
-      raf = requestAnimationFrame(loop);
-  }
-
-  function aim(x, y, jump = false) {
-    if (dead) return;
-    const ax = Math.max(0, Math.min(1, x));
-    const ay = Math.max(0, Math.min(1, y));
-
-    goal[0] = .3 + 2.1 * ax;
-    goal[1] = .3 + 1. - ay;
-
-    U.uBall.value[0] = goal[0];
-    U.uBall.value[1] = goal[1];
-
-    placeCursor();
-
-    snap = snap || jump;
-
-    if (motion.matches) draw();
-  }
-
-  function pointer(event, jump = false) {
-    const r = bounds;
-
-    if (r.width && r.height) {
-      aim(
-        (event.clientX - r.left) / r.width,
-        (event.clientY - r.top) / r.height,
-        jump
-      );
-    }
-  }
-
-  stage.addEventListener("pointerenter", e => {
-    bounds = stage.getBoundingClientRect();
-    pointer(e, true);
-  });
-  stage.addEventListener("pointermove", e => pointer(e));
-
-  stage.addEventListener("pointerdown", e => {
-    bounds = stage.getBoundingClientRect();
-    if (e.pointerType === "touch")
-      stage.setPointerCapture(e.pointerId);
-
-    pointer(e, true);
-  });
-
-  const release = e => {
-    if (stage.hasPointerCapture(e.pointerId))
-      stage.releasePointerCapture(e.pointerId);
-  };
-
-  stage.addEventListener("pointerup", release);
-  stage.addEventListener("pointercancel", release);
-
-  stage.addEventListener("keydown", e => {
-    const direction = {
-      ArrowLeft: [-.025, 0],
-      ArrowRight: [.025, 0],
-      ArrowUp: [0, -.05],
-      ArrowDown: [0, .05]
-    }[e.key];
-
-    if (!direction) return;
-
-    e.preventDefault();
-
-    aim(
-      (goal[0] - .3) / 2.1 + direction[0],
-      1. - (goal[1] - .3) + direction[1]
-    );
-  });
-
-  document.getElementById("theme").addEventListener("click", () => {
-    dark = !dark;
-    document.documentElement.dataset.dark = String(dark);
-
-    const button = document.getElementById("theme");
-    button.firstElementChild.textContent = dark ? "☀︎" : "☾";
-
-    button.setAttribute(
-      "aria-label",
-      dark ? "Attiva il tema chiaro" : "Attiva il tema scuro"
-    );
-
-    U.uColor.value.fill(dark ? .94 : .09);
-    draw();
-  });
-
-  canvas.addEventListener("webglcontextlost", () => {
-    dead = true;
-    cancelAnimationFrame(raf);
-    stage.style.cursor = "auto";
-    cursor.hidden = true;
-
-    const status = document.getElementById("status");
-    status.hidden = false;
-    status.textContent =
-      "Animazione interrotta. Ricarica la pagina per riprovare.";
-  });
-
-  document.addEventListener("visibilitychange", sync);
-  motion.addEventListener("change", () => {
-    if (!dead) {
-      clearTrails();
-      accumulateTrails(1 / 60, true);
-      draw();
-    }
-    sync();
-  });
-  window.addEventListener("scroll", () => {
-    bounds = stage.getBoundingClientRect();
-  }, { passive: true, capture: true });
-  window.addEventListener("resize", resize, { passive: true });
-
-  new ResizeObserver(resize).observe(stage);
-
-  new IntersectionObserver(([entry]) => {
-    visible = entry.isIntersecting;
-    sync();
-  }).observe(stage);
-
-  stepFluid(FLUID_STEP);
-  resize();
-
-  cursor.hidden = false;
-  stage.style.cursor = "none";
-  sync();
 }
 
-startFluid().catch(error => {
-  console.error(error);
+// Same fluid solver on devices without WebGL; only the drawing backend changes.
+class CanvasRenderer {
+  constructor(){
+    this.context=canvas.getContext('2d');
+    if(!this.context)throw Error('Canvas non disponibile');
+    this.history=document.createElement('canvas');this.hc=this.history.getContext('2d');
+    this.frames=0;
+  }
+  resize(w,h){this.width=w;this.height=h;this.history.width=w;this.history.height=h;}
+  clear(){this.hc.clearRect(0,0,this.width,this.height);}
+  accumulate(data,dt,ball){
+    const c=this.hc,w=this.width,h=this.height;
+    c.globalCompositeOperation='destination-out';c.fillStyle=`rgba(0,0,0,${1-Math.pow(.5,dt/SETTINGS.trailHalfLife)})`;c.fillRect(0,0,w,h);
+    c.globalCompositeOperation='source-over';c.strokeStyle=`rgba(255,255,255,${SETTINGS.opacity})`;
+    c.lineWidth=1;c.beginPath();
+    for(let i=0;i<data.length;i+=4){
+      c.moveTo((data[i]-.3)/2.4*w,(1.25-data[i+1])*h);
+      c.lineTo((data[i+2]-.3)/2.4*w,(1.25-data[i+3])*h);
+    }
+    c.stroke();
+    c.globalCompositeOperation='destination-out';c.fillStyle='#000';c.beginPath();
+    c.arc((ball[0]-.3)/2.4*w,(1.25-ball[1])*h,ball[2]*h,0,Math.PI*2);c.fill();
+    c.globalCompositeOperation='source-over';
+    // Remove low-alpha quantization residue infrequently, outside the hot loop.
+    if(++this.frames%90===0){const im=c.getImageData(0,0,w,h);for(let i=3;i<im.data.length;i+=4)if(im.data[i]<12)im.data[i]=0;c.putImageData(im,0,0);}
+  }
+  present(ball,dark){
+    const c=this.context,w=this.width,h=this.height;
+    const bg=dark?'#111111':'#fafafa',ink=dark?'#e8e8e8':'#202020';
+    c.clearRect(0,0,w,h);c.drawImage(this.history,0,0);
+    c.globalCompositeOperation='source-in';c.fillStyle=ink;c.fillRect(0,0,w,h);
+    c.globalCompositeOperation='source-over';
+    for(const axis of [0,1]){
+      const g=c.createLinearGradient(0,0,axis?0:w,axis?h:0);
+      g.addColorStop(0,bg);g.addColorStop(axis?.16:.09,dark?'rgba(17,17,17,0)':'rgba(250,250,250,0)');
+      g.addColorStop(axis?.84:.91,dark?'rgba(17,17,17,0)':'rgba(250,250,250,0)');g.addColorStop(1,bg);
+      c.fillStyle=g;c.fillRect(0,0,w,h);
+    }
+    const x=(ball[0]-.3)/2.4*w,y=(1.25-ball[1])*h;
+    c.beginPath();c.arc(x,y,ball[2]*h,0,Math.PI*2);c.fillStyle=bg;c.fill();
+    c.strokeStyle=dark?'rgba(232,232,232,.11)':'rgba(32,32,32,.11)';c.lineWidth=.7;c.stroke();
+  }
+}
 
-  document.getElementById("fluid-stage").style.cursor = "auto";
-  document.getElementById("fluid-cursor").hidden = true;
+let renderer,fluid,tracers,ball,dark=false,dead=false,visible=true,raf=0,last=0;
+let bounds=stage.getBoundingClientRect(),count=0,workAverage=0,slowFrames=0;
+const goal=new Float32Array([1.25,.75]);
+let snap=false,frames=0,elapsed=0;
+const diagnostics=new URLSearchParams(location.search).has('debug');
+const status=document.getElementById('status');
 
-  const status = document.getElementById("status");
-  status.hidden = false;
-  status.textContent = "Animazione non disponibile su questo dispositivo.";
+function present(){if(!dead&&renderer)renderer.present(ball,dark);}
+function resize(){
+  bounds=stage.getBoundingClientRect();if(!renderer||dead||!bounds.width)return;
+  const dpr=Math.min(devicePixelRatio||1,1.5);
+  const w=Math.round(bounds.width*dpr),h=Math.round(bounds.height*dpr);
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;renderer.resize(w,h);seedImage();}
+  present();
+}
+function seedImage(){
+  renderer.clear();
+  // A short frozen streamline exposure also gives reduced-motion users a real image.
+  for(let i=0;i<18;i++)renderer.accumulate(tracers.step(1/60,count),1/60,ball);
+}
+function advance(dt){
+  const ox=ball[0],oy=ball[1];
+  const amount=1-Math.exp(-dt/.045);
+  ball[0]+= (goal[0]-ball[0])*amount;ball[1]+=(goal[1]-ball[1])*amount;
+  const vx=snap?0:Math.max(-1.5,Math.min(1.5,(ball[0]-ox)/dt));
+  const vy=snap?0:Math.max(-1.5,Math.min(1.5,(ball[1]-oy)/dt));snap=false;
+  fluid.step(dt,ball[0],ball[1],vx,vy);
+  renderer.accumulate(tracers.step(dt,count),dt,ball);
+}
+function frame(now){
+  raf=0;if(dead||document.hidden||!visible||reduced.matches)return;
+  const dt=last?Math.min((now-last)/1000,1/30):1/60;
+  if(last&&now-last<1000/60-.6){raf=requestAnimationFrame(frame);return;}
+  const wall=last?(now-last):1000/60;last=now;
+  const start=performance.now();
+  // At low refresh rates substep the fluid instead of increasing its timestep.
+  if(dt>1/48){advance(dt*.5);advance(dt*.5);}else advance(dt);
+  present();
+  workAverage=workAverage*.96+(performance.now()-start)*.04;
+  // Only reduce density after sustained CPU pressure, not after a single slow frame.
+  if(workAverage>16&&++slowFrames>90&&count>7000){count=Math.max(7000,Math.floor(count*.8));slowFrames=0;}
+  else if(workAverage<=16)slowFrames=0;
+  if(diagnostics&&++frames%60===0){status.hidden=false;status.textContent=`${renderer instanceof GPURenderer?'WebGL':'Canvas 2D'} · ${count} particles · CPU ${workAverage.toFixed(1)} ms · frame ${(elapsed/60).toFixed(1)} ms`;elapsed=0;}
+  elapsed+=wall;
+  raf=requestAnimationFrame(frame);
+}
+function sync(){cancelAnimationFrame(raf);raf=0;last=0;snap=true;if(!dead&&visible&&!document.hidden&&!reduced.matches)raf=requestAnimationFrame(frame);}
+function aim(e,enter=false){
+  if(dead)return;if(enter)bounds=stage.getBoundingClientRect();
+  goal[0]=.3+Math.max(0,Math.min(1,(e.clientX-bounds.left)/bounds.width))*2.4;
+  goal[1]=1.25-Math.max(0,Math.min(1,(e.clientY-bounds.top)/bounds.height));
+  if(enter){ball[0]=goal[0];ball[1]=goal[1];snap=true;}
+  if(reduced.matches){ball[0]=goal[0];ball[1]=goal[1];fluid.obstacle(ball[0],ball[1],0,0);fluid.project(30);seedImage();present();}
+}
+theme.addEventListener('click',()=>{
+  dark=!dark;document.documentElement.dataset.dark=String(dark);
+  theme.setAttribute('aria-pressed',String(dark));theme.setAttribute('aria-label',dark?'Attiva il tema chiaro':'Attiva il tema scuro');present();
 });
 
+try{
+  const gl=canvas.getContext('webgl',{alpha:false,antialias:false,depth:false,stencil:false,preserveDrawingBuffer:false});
+  renderer=gl?new GPURenderer(gl):new CanvasRenderer();
+  fluid=renderer instanceof CanvasRenderer?new Fluid(112,56):new Fluid();
+  ball=new Float32Array([fluid.cx,fluid.cy,fluid.radius]);
+  count=renderer instanceof CanvasRenderer?(bounds.width<480?3000:6000):(bounds.width<480?SETTINGS.mobileParticles:SETTINGS.particles);
+  tracers=new Tracers(count,fluid);
+  // Establish the pressure field before the first visible frame.
+  for(let i=0;i<35;i++)fluid.step(1/60,ball[0],ball[1],0,0);
+  resize();stage.style.cursor='none';
+  stage.addEventListener('pointerenter',e=>aim(e,true));stage.addEventListener('pointermove',e=>aim(e));
+  stage.addEventListener('pointerdown',e=>aim(e,true));
+  stage.addEventListener('keydown',e=>{
+    const d={ArrowLeft:[-.04,0],ArrowRight:[.04,0],ArrowUp:[0,.04],ArrowDown:[0,-.04]}[e.key];
+    if(!d)return;e.preventDefault();goal[0]=Math.max(.3,Math.min(2.7,goal[0]+d[0]));goal[1]=Math.max(.25,Math.min(1.25,goal[1]+d[1]));
+    if(reduced.matches){ball[0]=goal[0];ball[1]=goal[1];fluid.obstacle(ball[0],ball[1],0,0);fluid.project(30);seedImage();present();}
+  });
+  new ResizeObserver(resize).observe(stage);window.addEventListener('resize',resize,{passive:true});
+  window.addEventListener('scroll',()=>{bounds=stage.getBoundingClientRect();},{passive:true,capture:true});
+  new IntersectionObserver(([e])=>{visible=e.isIntersecting;sync();}).observe(stage);
+  document.addEventListener('visibilitychange',sync);
+  reduced.addEventListener('change',()=>{seedImage();present();sync();});
+  canvas.addEventListener('webglcontextlost',()=>{dead=true;sync();stage.style.cursor='auto';status.hidden=false;status.textContent='Ricarica la pagina per riavviare l’animazione.';});
+  sync();
+}catch(error){
+  dead=true;cancelAnimationFrame(raf);stage.style.cursor='auto';console.error(error);
+  status.hidden=false;status.textContent='Animazione non disponibile su questo dispositivo.';
+}
