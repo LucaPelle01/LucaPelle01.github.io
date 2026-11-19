@@ -1,9 +1,9 @@
 // Modifica questi quattro valori prima della pubblicazione.
 const PROFILE = {
-  affiliation: "[Affiliazione attuale]",
-  email: "nome@example.com",
-  github: "https://github.com/USERNAME",
-  linkedin: "https://www.linkedin.com/in/USERNAME/"
+  work: "Artificial Intelligence Student, Politecnico di Milano, Italy",
+  email: "luca4.pellegrini@mail.polimi.it",
+  github: "https://github.com/LucaPelle01",
+  linkedin: "https://www.linkedin.com/in/luca-pellegrini-514b93251/"
 };
 
 // "inflow" = corrente da sinistra. "still" = fluido inizialmente in quiete.
