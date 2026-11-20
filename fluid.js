@@ -11,11 +11,13 @@ class Fluid {
     const size = this.stride * (ny + 3);
     for (const name of ["u", "v", "nextU", "nextV", "tmpU", "tmpV", "weight"]) this[name] = new Float32Array(size);
     this.open = new Uint8Array(size);
-    this.radius = ny * .058;
+    this.radius = 1.5;
+    this.active = false;
+    this.bodyU = 0;
+    this.bodyV = 0;
     this.x = 1 + nx * .28;
     this.y = 1 + ny * .50;
-    this.targetX = this.x;
-    this.targetY = this.y;
+
     this.inlet = .72 * ny / 64;
     this.viscosity = .018 * (ny / 64) ** 2;
     if (mode === "inflow") this.u.fill(this.inlet);
@@ -36,7 +38,7 @@ class Fluid {
     for (let j=1; j<=ny; j++) {
       for (let i=1; i<=nx; i++) {
         const dx=i+.5-this.x, dy=j+.5-this.y;
-        open[i+j*s] = dx*dx+dy*dy >= radius*radius;
+        open[i+j*s] = !this.active || dx*dx+dy*dy >= radius*radius;
       }
       // Open outflow, prescribed inflow. The still tank is sealed on all sides.
       open[nx+1+j*s] = this.mode === "inflow";
@@ -70,8 +72,20 @@ class Fluid {
       Math.min(left,right,up,down,center),Math.max(left,right,up,down,center));
     return limited+dt*this.viscosity*(left+right+up+down-4*center);
   }
-  moveObstacle(dt) {
-    const dx = this.targetX - this.x, dy = this.targetY - this.y;
+  enter(x, y) {
+    this.active = true;
+    this.x = x;
+    this.y = y;
+    this.bodyU = this.bodyV = 0;
+    this.boundaries(0, 0);
+  }
+  leave() {
+    this.active = false;
+    this.bodyU = this.bodyV = 0;
+    this.boundaries(0, 0);
+  }
+  moveTo(x, y, dt) {
+    const dx = x - this.x, dy = y - this.y;
     const length = Math.hypot(dx,dy);
     // Bound the impulse, never the pointer position. Long strokes affect the
     // entire swept disk even if the device delivered only two pointer samples.
@@ -79,10 +93,10 @@ class Fluid {
     const vx = dx*scale, vy = dy*scale;
     if (length > .5*this.radius) {
       const r = this.radius;
-      const left = Math.max(1,Math.floor(Math.min(this.x,this.targetX)-r));
-      const right = Math.min(this.nx,Math.ceil(Math.max(this.x,this.targetX)+r));
-      const top = Math.max(1,Math.floor(Math.min(this.y,this.targetY)-r));
-      const bottom = Math.min(this.ny,Math.ceil(Math.max(this.y,this.targetY)+r));
+      const left = Math.max(1,Math.floor(Math.min(this.x,x)-r));
+      const right = Math.min(this.nx,Math.ceil(Math.max(this.x,x)+r));
+      const top = Math.max(1,Math.floor(Math.min(this.y,y)-r));
+      const bottom = Math.min(this.ny,Math.ceil(Math.max(this.y,y)+r));
       for (let j=top; j<=bottom; j++) {
         for (let i=left; i<=right; i++) {
           const rx=i+.5-this.x, ry=j+.5-this.y;
@@ -95,8 +109,9 @@ class Fluid {
         }
       }
     }
-    this.x=this.targetX;
-    this.y=this.targetY;
+    this.x=x;
+    this.y=y;
+    this.bodyU = vx; this.bodyV = vy;
     this.boundaries(vx,vy);
   }
   step(dt=1) {
@@ -124,7 +139,8 @@ class Fluid {
     }
     this.u=this.tmpU; this.v=this.tmpV; this.tmpU=u; this.tmpV=v;
 
-    this.moveObstacle(dt);
+    this.boundaries(this.bodyU, this.bodyV);
+    this.bodyU = this.bodyV = 0;
 
     // In-place SOR pressure projection. Each local pressure increment cancels
     // divergence by correcting only faces shared with another fluid cell.

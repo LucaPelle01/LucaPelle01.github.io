@@ -17,169 +17,122 @@ themeButton.addEventListener("click",()=>{
   root.dataset.theme=isLight() ? "dark" : "light";
   try { localStorage.setItem("luca.theme",root.dataset.theme); } catch {}
   updateThemeButton();
-  paint();
 });
 
-const canvas=document.getElementById("flow");
-const ctx=canvas.getContext("2d",{alpha:false});
-let fluid, ink, width, height, pixelRatio;
-let activePointer=null, previousTime=0, onScreen=true;
+const canvas = document.getElementById("flow");
+const contact = document.querySelector(".contact");
+let fluid, surface, renderer, width, height, pixelRatio;
+let owner=null, contactId=null, previousInput=0, lastFrame=0, animation=0;
+let visible=true, awake=false, elapsedSinceStroke=0;
 
-// Decode a precomputed, evolved state so that the first frame has a wake.
-// This snapshot only initializes the simulation. Every later step runs locally.
-function unpack(text,scale) {
-  const bytes=atob(text);
-  const values=new Float32Array(bytes.length/2);
-  for(let i=0;i<values.length;i++) {
-    const word=bytes.charCodeAt(2*i) | bytes.charCodeAt(2*i+1)<<8;
-    values[i]=((word<<16)>>16)/scale;
-  }
-  return values;
+function schedule() {
+  if(!animation && visible && !document.hidden) animation=requestAnimationFrame(frame);
 }
-function warmStart(f, pigment) {
-  const aspect=f.nx/f.ny;
-  const state=WAKE_PRESETS.reduce((a,b)=>Math.abs(a.nx/a.ny-aspect)<Math.abs(b.nx/b.ny-aspect)?a:b);
-  const original=new Fluid(state.nx,state.ny,"inflow");
-  original.u=unpack(state.u,8192); original.v=unpack(state.v,8192);
-  const horizontal=f.nx/state.nx, vertical=f.ny/state.ny;
-  for(let j=1;j<=f.ny+1;j++) {
-    for(let i=1;i<=f.nx+1;i++) {
-      const k=i+j*f.stride;
-      f.u[k]=vertical*original.sample(original.u,1+(i-1)/horizontal,.5+(j-.5)/vertical);
-      f.v[k]=vertical*original.sample(original.v,.5+(i-.5)/horizontal,1+(j-1)/vertical);
-    }
+function frame(now) {
+  animation=0;
+  if(!visible || document.hidden) return;
+  const dt=clamp(lastFrame ? (now-lastFrame)*.038 : .6,.035,1.1);
+  lastFrame=now;
+  fluid.step(dt);
+  const peak=surface.step(dt);
+  renderer.draw(fluid,surface);
+  elapsedSinceStroke+=dt;
+  if(FLOW_MODE==="still" && peak<.0003 && elapsedSinceStroke>75) {
+    // Make the final, imperceptible residual exactly zero; quiet mode can sleep.
+    surface.height.fill(0); surface.speed.fill(0);
+    fluid.u.fill(0); fluid.v.fill(0);
+    renderer.draw(fluid,surface);
+    awake=false; lastFrame=0;
   }
-  f.boundaries(0,0);
-  const bytes = atob(state.dye);
-  const w = state.nx*state.scale, h = state.ny*state.scale;
-  for (let y=0; y<pigment.h; y++) {
-    const sy=clamp((y+.5)*h/pigment.h-.5,0,h-1.001);
-    const iy=Math.floor(sy), by=sy-iy;
-    for (let x=0; x<pigment.w; x++) {
-      const sx=clamp((x+.5)*w/pigment.w-.5,0,w-1.001);
-      const ix=Math.floor(sx), bx=sx-ix, p=iy*w+ix;
-      const top=(1-bx)*bytes.charCodeAt(p)+bx*bytes.charCodeAt(p+1);
-      const bottom=(1-bx)*bytes.charCodeAt(p+w)+bx*bytes.charCodeAt(p+w+1);
-      pigment.dye[x+y*pigment.w]=((1-by)*top+by*bottom)/255;
-    }
-  }
-  pigment.time=state.time;
+  if(awake || FLOW_MODE==="inflow") schedule();
 }
 
-// The simulation and its pigment are independent of display pixel density.
-// Only the final disk and the finished image are composited at display resolution.
-const inkCanvas = document.createElement("canvas");
-const inkContext = inkCanvas.getContext("2d", {alpha:false});
-let imageData, rgba, slowFrames=0, stirred=false;
-function configurePigmentCanvas() {
-  inkCanvas.width=ink.w; inkCanvas.height=ink.h;
-  imageData=inkContext.createImageData(ink.w,ink.h);
-  rgba=new Uint32Array(imageData.data.buffer);
+function hideObstacle() {
+  if(fluid && fluid.active) fluid.leave();
+  owner=null;
+  contact.hidden=true;
+  previousInput=0;
 }
-
 function resize() {
-  const rect=canvas.getBoundingClientRect();
-  const dpr=Math.min(2,window.devicePixelRatio||1);
-  if (!rect.width || !rect.height || (width===rect.width && height===rect.height && pixelRatio===dpr)) return;
-  width=rect.width; height=rect.height; pixelRatio=dpr;
-  canvas.width=Math.round(width*dpr);
-  canvas.height=Math.round(height*dpr);
-  const ny=clamp(Math.round(height/6.2),32,48);
-  const nx=Math.max(32,Math.round(ny*width/height));
-  if(!fluid || nx!==fluid.nx || ny!==fluid.ny) {
-    fluid=new Fluid(nx,ny,FLOW_MODE);
-    ink=new Ink(fluid,4);
-    if(FLOW_MODE==="inflow") warmStart(fluid,ink);
-    configurePigmentCanvas();
-    stirred=false; slowFrames=0;
-  }
-  paint();
+  const box=canvas.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  if(!box.width || !box.height || (width===box.width && height===box.height && pixelRatio===dpr)) return;
+  width=box.width; height=box.height; pixelRatio=dpr;
+  hideObstacle();
+  const ny=clamp(Math.round(height/3),28,48);
+  fluid=new Fluid(Math.max(32,Math.round(width*ny/height)),ny,FLOW_MODE);
+  fluid.radius=4.5*ny/height;
+  surface=new Surface(fluid);
+  renderer=new Mercury(canvas,fluid,width,height);
+  renderer.draw(fluid,surface);
+  elapsedSinceStroke=0; lastFrame=0; awake=false;
+  if(FLOW_MODE==="inflow") schedule();
 }
 
-function paint() {
-  if(!fluid) return;
-  const light=isLight();
-  const {w,h,dye}=ink;
-  // Directional light on the concentration gradient brings out thin folds.
-  // The broad tone and fine highlights both come from the same advected field.
-  for (let y=0; y<h; y++) {
-    const above=y===0 ? 0 : -w, below=y===h-1 ? 0 : w;
-    for (let x=0; x<w; x++) {
-      const k=x+y*w;
-      const gx=dye[x===w-1?k:k+1]-dye[x===0?k:k-1];
-      const gy=dye[k+below]-dye[k+above];
-      const slope=-.46*gx-.89*gy;
-      const reflection=100*slope/(.19+Math.abs(slope));
-      const c=dye[k];
-      const tone=light ? 243-132*c-46*c*c+reflection*.62 : 17+78*c+162*c*c+reflection*.94;
-      const value=clamp(Math.round(tone),0,255);
-      rgba[k]=0xff000000 | value*0x010101;
-    }
+function updatePosition(px,py,kind,time) {
+  const x=1+px*fluid.nx/width, y=1+py*fluid.ny/height;
+  if(owner!==kind || !fluid.active) {
+    // Entry creates the obstacle exactly here, with no stroke from a phantom origin.
+    fluid.enter(x,y);
+    owner=kind;
+  } else if(x!==fluid.x || y!==fluid.y) {
+    surface.stroke(fluid.x,fluid.y,x,y);
+    fluid.moveTo(x,y,clamp((time-previousInput)*.038,.05,1.1));
+    awake=true; elapsedSinceStroke=0; schedule();
   }
-  inkContext.putImageData(imageData,0,0);
-  ctx.setTransform(canvas.width/width,0,0,canvas.height/height,0,0);
-  ctx.imageSmoothingEnabled=true;
-  ctx.drawImage(inkCanvas,0,0,width,height);
-  const x=(fluid.x-1)*width/fluid.nx, y=(fluid.y-1)*height/fluid.ny;
-  ctx.beginPath();
-  ctx.arc(x,y,fluid.radius*height/fluid.ny,0,Math.PI*2);
-  ctx.fillStyle=light?"#eee":"#151515"; ctx.fill();
-  ctx.strokeStyle=light?"#666":"#a0a0a0"; ctx.lineWidth=.75; ctx.stroke();
+  previousInput=time;
+  // A mouse or hovering pen uses the native, hotspot-centred CSS cursor.
+  // Only touch and keyboard input need a separate visual marker.
+  contact.hidden=kind!=="touch" && kind!=="keyboard";
+  if(!contact.hidden) contact.style.transform="translate("+px+"px,"+py+"px)";
 }
-
-function setTarget(x,y) {
-  const inset=fluid.radius+1.5;
-  fluid.targetX=clamp(x,1+inset,fluid.nx+1-inset);
-  fluid.targetY=clamp(y,1+inset,fluid.ny+1-inset);
-}
-function point(event) {
+function input(event) {
+  if(!event.isPrimary || (event.pointerType==="touch" && event.pointerId!==contactId)) return;
   const box=canvas.getBoundingClientRect();
-  setTarget(1+(event.clientX-box.left)*fluid.nx/box.width,1+(event.clientY-box.top)*fluid.ny/box.height);
+  const px=event.clientX-box.left, py=event.clientY-box.top;
+  if(px<0 || px>=box.width || py<0 || py>=box.height) { hideObstacle(); return; }
+  updatePosition(px,py,event.pointerType,event.timeStamp);
 }
+canvas.addEventListener("pointerenter",input);
+canvas.addEventListener("pointermove",event=>{
+  const samples=event.getCoalescedEvents?.()||[];
+  for(const sample of samples) input(sample);
+  input(event);
+});
 canvas.addEventListener("pointerdown",event=>{
   if(!event.isPrimary) return;
-  activePointer=event.pointerId;
-  canvas.setPointerCapture(event.pointerId); point(event);
+  if(event.pointerType==="touch") {
+    contactId=event.pointerId;
+    canvas.setPointerCapture(event.pointerId);
+  }
+  input(event);
 });
-canvas.addEventListener("pointermove",event=>{
-  if(event.isPrimary && (event.pointerType==="mouse" || event.pointerId===activePointer)) point(event);
-});
-function release(event) { if(event.pointerId===activePointer) activePointer=null; }
-canvas.addEventListener("pointerup",release);
-canvas.addEventListener("pointercancel",release);
-canvas.addEventListener("lostpointercapture",release);
+canvas.addEventListener("pointerleave",event=>{ if(event.isPrimary) hideObstacle(); });
+function endContact(event) {
+  if(event.pointerId!==contactId) return;
+  contactId=null; hideObstacle();
+}
+canvas.addEventListener("pointerup",endContact);
+canvas.addEventListener("lostpointercapture",endContact);
+canvas.addEventListener("pointercancel",event=>{ if(event.isPrimary) { contactId=null; hideObstacle(); } });
 canvas.addEventListener("keydown",event=>{
   const direction={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
   if(!direction) return;
   event.preventDefault();
-  setTarget(fluid.targetX+direction[0]*fluid.radius*.5,fluid.targetY+direction[1]*fluid.radius*.5);
+  if(owner!=="keyboard") updatePosition(width/2,height/2,"keyboard",event.timeStamp);
+  const px=(fluid.x-1)*width/fluid.nx, py=(fluid.y-1)*height/fluid.ny;
+  updatePosition(clamp(px+direction[0]*4,0,width-.01),clamp(py+direction[1]*4,0,height-.01),"keyboard",event.timeStamp);
 });
-
-function frame(time) {
-  const moving = fluid.x!==fluid.targetX || fluid.y!==fluid.targetY;
-  if(moving) stirred=true;
-  if(onScreen && !document.hidden && (FLOW_MODE==="inflow" || stirred)) {
-    const started=performance.now();
-    const dt = clamp(previousTime ? (time-previousTime)*.035 : .5, .06, 1.25);
-    // One full interaction update per display frame, including high-refresh displays.
-    fluid.step(dt);
-    ink.step(fluid,dt);
-    paint();
-    // If the rendering budget is repeatedly exceeded on this device, retain
-    // the evolved dye and lower only its sampling density, keeping input responsive.
-    if(ink.scale===4) {
-      slowFrames=Math.max(0,slowFrames+(performance.now()-started>15 ? 1 : -1));
-      if(slowFrames>=24) {
-        ink=ink.reduceResolution(fluid);
-        configurePigmentCanvas();
-        slowFrames=0;
-      }
-    }
-  }
-  previousTime=time;
-  requestAnimationFrame(frame);
-}
-resize();
+canvas.addEventListener("blur",()=>{ if(owner==="keyboard") hideObstacle(); });
+window.addEventListener("blur",()=>{contactId=null; hideObstacle();});
+document.addEventListener("visibilitychange",()=>{
+  lastFrame=0;
+  if(document.hidden) {contactId=null; hideObstacle();}
+  else if(awake || FLOW_MODE==="inflow") schedule();
+});
 new ResizeObserver(resize).observe(canvas);
-new IntersectionObserver(entries=>{onScreen=entries[0].isIntersecting;}).observe(canvas);
-requestAnimationFrame(frame);
+new IntersectionObserver(entries=>{
+  visible=entries[0].isIntersecting; lastFrame=0;
+  if(!visible) hideObstacle();
+  else if(awake || FLOW_MODE==="inflow") schedule();
+}).observe(canvas);
+resize();

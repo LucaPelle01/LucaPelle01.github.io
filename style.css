@@ -11,9 +11,9 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--page); color: var(--ink); }
-main { width: min(800px, calc(100% - 84px)); margin: clamp(48px, 12vh, 128px) auto 52px; }
+main { width: min(400px, calc(50% - 42px)); margin: clamp(48px, 12vh, 128px) auto 52px; }
 header { position: relative; padding-right: 54px; }
-h1 { margin: 0; font-family: "Courier Prime", "Courier New", monospace; font-size: clamp(32px, 5vw, 57px); line-height: 1.04; font-weight: 400; letter-spacing: -.08em; }
+h1 { margin: 0; font-family: "Courier Prime", "Courier New", monospace; font-size: clamp(27px, 3.2vw, 38px); line-height: 1.04; font-weight: 400; letter-spacing: -.08em; }
 #affiliation { margin: 12px 0 4px; font-size: 12px; line-height: 1.6; color: var(--muted); }
 nav { display: flex; align-items: center; margin-left: -7px; gap: 2px; }
 nav a, #theme { display: grid; place-items: center; color: var(--muted); border-radius: 5px; cursor: pointer; transition: transform 160ms ease, color 160ms, background 160ms; }
@@ -29,8 +29,8 @@ svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width:
 }
 #theme svg { transition: transform 180ms ease; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-.frame { margin-top: 25px; height: clamp(200px, 26vw, 272px); background: var(--field); border: 1px solid var(--line); }
-canvas { display: block; width: 100%; height: 100%; cursor: none; touch-action: none; }
+.frame { position: relative; overflow: hidden; margin-top: 25px; height: clamp(100px, 13vw, 136px); background: var(--field); border: 1px solid var(--line); }
+canvas { display: block; width: 100%; height: 100%; cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Ccircle cx='7' cy='7' r='4.5' fill='%23262626' stroke='%23eee' stroke-width='.8'/%3E%3C/svg%3E") 7 7, crosshair; touch-action: none; }
 footer { padding-top: clamp(20px, 3vh, 30px); }
 footer p { margin: 0; font-size: 13px; line-height: 1.5; letter-spacing: -.035em; }
 footer .signature { margin-top: 8px; color: var(--muted); font: italic 16px/1.3 Georgia, serif; }
@@ -41,5 +41,7 @@ footer .signature { margin-top: 8px; color: var(--muted); font: italic 16px/1.3 
 @keyframes swap { 0%,18%,100% {transform:translate(0,0)} 31% {transform:translate(1ch,-.58em)} 44%,65% {transform:translate(2ch,0)} 82% {transform:translate(1ch,-.58em)} }
 @keyframes slide2 { 0%,18%,100% {transform:translateX(0)} 38%,65% {transform:translateX(-1ch)} }
 @keyframes slide3 { 0%,24%,100% {transform:translateX(0)} 44%,65% {transform:translateX(-1ch)} }
-@media (max-width:600px) { main { width: calc(100% - 36px); margin-top: 34px; } .frame { height: clamp(176px, 52vw, 226px); } #theme { width: 38px; height: 38px; } nav a { width: 40px; height: 44px; } }
+@media (max-width:600px) { main { width: calc(100% - 36px); margin-top: 34px; } .frame { width: 50%; height: clamp(88px, 26vw, 113px); } #theme { width: 38px; height: 38px; } nav a { width: 40px; height: 44px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } nav a:hover, #theme:hover, #theme:hover svg { transform: none; } }
+
+.contact { position: absolute; left: 0; top: 0; width: 9.8px; height: 9.8px; margin: -4.9px; border: .8px solid #eee; background: #262626; border-radius: 50%; pointer-events: none; }
