@@ -7,4 +7,4 @@ const PROFILE = {
 };
 
 // "inflow" = corrente da sinistra. "still" = fluido inizialmente in quiete.
-const FLOW_MODE = "inflow";
+const FLOW_MODE = "still";
