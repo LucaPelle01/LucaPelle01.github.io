@@ -1,12 +1,14 @@
 "use strict";
 
 document.getElementById("affiliation").textContent=PROFILE.affiliation;
-document.getElementById("email").href="mailto:"+PROFILE.email;
+const emailHref = "mailto:" + PROFILE.email;
+document.getElementById("email").href = emailHref;
+document.getElementById("collaboration-email").href = emailHref;
 for (const id of ["github","linkedin"]) document.getElementById(id).href=PROFILE[id];
 
 const root=document.documentElement;
 const themeButton=document.getElementById("theme");
-const themeNames = { dark: "scuro", light: "panna", blue: "blu pastello" };
+const themeNames = { dark: "scuro", light: "panna", blue: "Blue Heritage" };
 const nextTheme = { dark: "light", light: "blue", blue: "dark" };
 
 function updateThemeButton() {

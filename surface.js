@@ -192,7 +192,7 @@ class Mercury {
     const ramps = {
       dark:  [[0, 0, 0], [128, 128, 128], [255, 255, 255]],
       light: [[48, 43, 36], [172, 154, 125], [255, 249, 233]],
-      blue:  [[19, 35, 55], [94, 132, 170], [231, 243, 254]]
+      blue:  [[16, 44, 83], [75, 112, 156], [225, 237, 249]]
     };
     const colors = ramps[theme] || ramps.dark;
     const bytes = new Uint8ClampedArray(256 * 4);

@@ -13,16 +13,19 @@
   --hover: #e6dac6; --field: #e5dccd;
 }
 :root[data-theme="blue"] {
-  color-scheme: light;
-  --page: #c4d6e8; --ink: #20374d; --muted: #3e566d; --line: #9bb0c5;
-  --hover: #afc5db; --field: #b5c9dd;
+  color-scheme: dark;
+  --page: #102c53; --ink: #f0f4fa; --muted: #c0cfdf; --line: #527098;
+  --hover: #27466b; --field: #18375e;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-size: var(--text-size); line-height: 1.6; font-style: normal; background: var(--page); color: var(--ink); }
 main { width: min(800px, calc(100% - 84px)); margin: clamp(76px, 12vh, 128px) auto 52px; }
 header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; }
-h1 { margin: 0; font-size: clamp(27px, 3.2vw, 38px); line-height: 1.12; font-weight: 700; letter-spacing: -.055em; }
-#affiliation { grid-column: 1 / -1; margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+h1 { margin: 0; font-family: "Courier New", Courier, "Liberation Mono", monospace; font-size: clamp(27px, 3.2vw, 38px); line-height: 1.12; font-weight: 700; letter-spacing: -.055em; }
+#affiliation, .collaboration { grid-column: 1 / -1; margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.collaboration { margin-top: 4px; }
+.collaboration a { color: inherit; text-decoration: underline; text-underline-offset: .2em; }
+.collaboration a:hover, .collaboration a:focus-visible { color: var(--ink); }
 nav { display: flex; align-items: center; gap: 2px; }
 nav a, #theme { display: grid; place-items: center; color: var(--muted); border-radius: 5px; cursor: pointer; transition: transform 160ms ease, color 160ms, background 160ms; }
 nav a { width: 40px; height: 40px; }
