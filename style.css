@@ -18,9 +18,9 @@ h1 { margin: 0; font-family: "Courier Prime", "Courier New", monospace; font-siz
 nav { display: flex; align-items: center; margin-left: -7px; gap: 2px; }
 nav a, #theme { display: grid; place-items: center; color: var(--muted); border-radius: 5px; cursor: pointer; transition: transform 160ms ease, color 160ms, background 160ms; }
 nav a { width: 35px; height: 36px; }
-svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 #theme { position: absolute; right: 0; top: 1px; width: 38px; height: 38px; background: var(--button); border: 1px solid var(--line); border-radius: 50%; color: var(--ink); }
-#theme svg { width: 17px; height: 17px; }
+#theme svg { width: 32px; height: 32px; }
 #theme .moon, [data-theme="light"] #theme .sun { display: none; }
 [data-theme="light"] #theme .moon { display: block; }
 @media (hover:hover) {
@@ -41,7 +41,7 @@ footer .signature { margin-top: 8px; color: var(--muted); font: italic 16px/1.3 
 @keyframes swap { 0%,18%,100% {transform:translate(0,0)} 31% {transform:translate(1ch,-.58em)} 44%,65% {transform:translate(2ch,0)} 82% {transform:translate(1ch,-.58em)} }
 @keyframes slide2 { 0%,18%,100% {transform:translateX(0)} 38%,65% {transform:translateX(-1ch)} }
 @keyframes slide3 { 0%,24%,100% {transform:translateX(0)} 44%,65% {transform:translateX(-1ch)} }
-@media (max-width:600px) { main { width: calc(100% - 36px); margin-top: 34px; } .frame { width: 100%; height: clamp(176px, 52vw, 226px); } #theme { width: 38px; height: 38px; } nav a { width: 40px; height: 44px; } }
+@media (max-width:600px) { main { width: calc(100% - 36px); margin-top: 34px; } .frame { width: 100%; height: clamp(176px, 52vw, 226px); } #theme { width: 38px; height: 38px; } nav a { width: 50px; height: 54px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } nav a:hover, #theme:hover, #theme:hover svg { transform: none; } }
 
 .contact { position: absolute; left: 0; top: 0; width: 9.8px; height: 9.8px; margin: -4.9px; border: .8px solid #eee; background: #262626; border-radius: 50%; pointer-events: none; }
