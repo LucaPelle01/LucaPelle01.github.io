@@ -8,6 +8,8 @@ In `config.js`, modifica i campi `PROFILE.affiliation`, `PROFILE.email`, `PROFIL
 
 Imposta `FLOW_MODE` su `"still"` per la quiete iniziale (predefinita) o su `"inflow"` per la corrente da sinistra. Ricarica la pagina dopo una modifica.
 
+Il pulsante in alto a destra alterna i temi scuro (luna), panna (sole) e blu pastello (Saturno). L’icona indica il tema corrente. Il browser ricorda la scelta.
+
 ## Interazione
 
 Con il mouse, il disco è il cursore di sistema con il centro sul punto di interazione. Il cilindro fisico nasce all’ingresso e viene rimosso all’uscita. Su touch appare sotto il dito e scompare al rilascio. Da tastiera, seleziona il riquadro con Tab e usa le frecce.

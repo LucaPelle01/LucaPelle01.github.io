@@ -6,15 +6,18 @@ for (const id of ["github","linkedin"]) document.getElementById(id).href=PROFILE
 
 const root=document.documentElement;
 const themeButton=document.getElementById("theme");
-const isLight=()=>root.dataset.theme==="light";
+const themeNames = { dark: "scuro", light: "panna", blue: "blu pastello" };
+const nextTheme = { dark: "light", light: "blue", blue: "dark" };
+
 function updateThemeButton() {
-  const label=isLight() ? "Attiva il tema scuro" : "Attiva il tema chiaro";
-  themeButton.setAttribute("aria-label",label);
-  themeButton.title=label;
+  const current = root.dataset.theme;
+  const label = "Tema " + themeNames[current] + ". Attiva il tema " + themeNames[nextTheme[current]];
+  themeButton.setAttribute("aria-label", label);
+  themeButton.title = label;
 }
 updateThemeButton();
 themeButton.addEventListener("click",()=>{
-  root.dataset.theme=isLight() ? "dark" : "light";
+  root.dataset.theme = nextTheme[root.dataset.theme];
   try { localStorage.setItem("luca.theme",root.dataset.theme); } catch {}
   updateThemeButton();
 });
