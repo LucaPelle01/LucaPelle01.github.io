@@ -8,7 +8,7 @@ In `config.js`, modifica i campi `PROFILE.affiliation`, `PROFILE.email`, `PROFIL
 
 Imposta `FLOW_MODE` su `"still"` per la quiete iniziale (predefinita) o su `"inflow"` per la corrente da sinistra. Ricarica la pagina dopo una modifica.
 
-Il pulsante in alto a destra alterna i temi scuro (luna), panna (sole) e blu pastello (Saturno). L’icona indica il tema corrente. Il browser ricorda la scelta.
+Il pulsante in alto a destra alterna i temi scuro (luna), panna (sole) e blu pastello (Saturno). L’icona indica il tema corrente. La superficie passa dall’argento al metallo champagne e poi all’azzurro acciaio. Il browser ricorda la scelta.
 
 ## Interazione
 

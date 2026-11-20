@@ -134,7 +134,7 @@ function reflectedLight(slopeX, slopeY, grazing) {
 // A grayscale studio environment sampled by reflection. A large softbox, a
 // dark panel and a side light produce continuous specular reflections on metal.
 class Mercury {
-  constructor(canvas, flow, width, height) {
+  constructor(canvas, flow, width, height, theme="dark") {
     this.ctx=canvas.getContext("2d",{alpha:false});
     const density=Math.min(2,window.devicePixelRatio||1);
     this.w=canvas.width=Math.round(width*density);
@@ -164,7 +164,7 @@ class Mercury {
     this.cellY=new Uint16Array(this.h);
     this.endX=new Uint16Array(flow.nx+1);
     this.changed=new Uint8Array(flow.u.length);
-    this.firstFrame=true;
+    this.setTheme(theme);
     this.fx=new Float32Array(this.w);
     this.fy=new Float32Array(this.h);
     // Static meniscus around the shallow tray, including its rounded corners.
@@ -185,6 +185,28 @@ class Mercury {
     }
     this.normalX=new Float32Array(flow.u.length);
     this.normalY=new Float32Array(flow.u.length);
+  }
+
+  setTheme(theme) {
+    // Map shadow, midtone and highlight separately so each metal keeps its sheen.
+    const ramps = {
+      dark:  [[0, 0, 0], [128, 128, 128], [255, 255, 255]],
+      light: [[48, 43, 36], [172, 154, 125], [255, 249, 233]],
+      blue:  [[19, 35, 55], [94, 132, 170], [231, 243, 254]]
+    };
+    const colors = ramps[theme] || ramps.dark;
+    const bytes = new Uint8ClampedArray(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      const band = i < 128 ? 0 : 1;
+      const t = band === 0 ? i / 128 : (i - 128) / 127;
+      for (let channel = 0; channel < 3; channel++) {
+        const start = colors[band][channel], end = colors[band + 1][channel];
+        bytes[4*i + channel] = start + t*(end - start);
+      }
+      bytes[4*i + 3] = 255;
+    }
+    this.palette = new Uint32Array(bytes.buffer);
+    this.firstFrame = true;
   }
 
   draw(flow,surface) {
@@ -228,7 +250,7 @@ class Mercury {
               const high=this.lightMap[lut+below]+fx*(this.lightMap[lut+below+next]-this.lightMap[lut+below]);
               value=Math.round(low+fy*(high-low));
             }
-            this.pixels[k]=0xff000000 | value*0x010101;
+            this.pixels[k]=this.palette[value];
           }
         }
         i=end;

@@ -20,6 +20,10 @@ themeButton.addEventListener("click",()=>{
   root.dataset.theme = nextTheme[root.dataset.theme];
   try { localStorage.setItem("luca.theme",root.dataset.theme); } catch {}
   updateThemeButton();
+  if (renderer) {
+    renderer.setTheme(root.dataset.theme);
+    renderer.draw(fluid, surface);
+  }
 });
 
 const canvas = document.getElementById("flow");
@@ -66,7 +70,7 @@ function resize() {
   fluid=new Fluid(Math.max(32,Math.round(width*ny/height)),ny,FLOW_MODE);
   fluid.radius=4.5*ny/height;
   surface=new Surface(fluid,ny/referenceRows);
-  renderer=new Mercury(canvas,fluid,width,height);
+  renderer=new Mercury(canvas,fluid,width,height,root.dataset.theme);
   renderer.draw(fluid,surface);
   elapsedSinceStroke=0; lastFrame=0; awake=false;
   if(FLOW_MODE==="inflow") schedule();
