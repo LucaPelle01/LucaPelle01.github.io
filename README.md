@@ -4,7 +4,7 @@ Apri `index.html` per provare il sito. Per pubblicarlo, copia i file nella radic
 
 ## Personalizzazione
 
-In `config.js`, modifica i campi `PROFILE.affiliation`, `PROFILE.email`, `PROFILE.github` e `PROFILE.linkedin`. Inserisci l’indirizzo email senza prefisso e gli URL completi dei profili. L’icona email e il link “Get in touch” usano entrambi `PROFILE.email`.
+In `config.js`, modifica i campi `PROFILE.affiliation`, `PROFILE.email`, `PROFILE.github` e `PROFILE.linkedin`. Inserisci l’indirizzo email senza prefisso e gli URL completi dei profili. L’icona email usa `PROFILE.email`.
 
 Imposta `FLOW_MODE` su `"still"` per la quiete iniziale (predefinita) o su `"inflow"` per la corrente da sinistra. Ricarica la pagina dopo una modifica.
 

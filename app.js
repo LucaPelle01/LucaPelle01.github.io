@@ -1,9 +1,7 @@
 "use strict";
 
 document.getElementById("affiliation").textContent=PROFILE.affiliation;
-const emailHref = "mailto:" + PROFILE.email;
-document.getElementById("email").href = emailHref;
-document.getElementById("collaboration-email").href = emailHref;
+document.getElementById("email").href = "mailto:" + PROFILE.email;
 for (const id of ["github","linkedin"]) document.getElementById(id).href=PROFILE[id];
 
 const root=document.documentElement;
