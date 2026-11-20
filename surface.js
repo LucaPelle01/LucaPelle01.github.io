@@ -1,8 +1,9 @@
 // Height is a display surface coupled to the horizontal incompressible flow.
 // Its local slope selects the direction reflected into the viewer's eye.
 class Surface {
-  constructor(flow) {
+  constructor(flow, refinement=1) {
     this.flow = flow;
+    this.refinement = refinement;
     const size = flow.u.length;
     this.height = new Float32Array(size);
     this.speed = new Float32Array(size);
@@ -17,9 +18,9 @@ class Surface {
     const f = this.flow;
     const dx = x1 - x0, dy = y1 - y0, length = Math.hypot(dx,dy);
     if (length < .001) return;
-    const r = Math.max(2.1, f.radius * 1.4);
+    const r = Math.max(2.1*this.refinement, f.radius * 1.4);
     const reach = 3*r;
-    const pressure = Math.min(length,1.8)*.23;
+    const pressure = Math.min(length/this.refinement,1.8)*.23;
     for(let j=Math.max(1,Math.floor(Math.min(y0,y1)-reach)); j<=Math.min(f.ny,Math.ceil(Math.max(y0,y1)+reach)); j++) {
       for(let i=Math.max(1,Math.floor(Math.min(x0,x1)-reach)); i<=Math.min(f.nx,Math.ceil(Math.max(x0,x1)+reach)); i++) {
         const rx=i+.5-x0, ry=j+.5-y0;
@@ -35,7 +36,7 @@ class Surface {
 
   step(dt) {
     // Short wave steps keep the explicit capillary display stable at lower frame rates.
-    const count = Math.ceil(dt / .78);
+    const count = Math.ceil(dt*this.refinement / .72);
     let peak = 0;
     for (let i = 0; i < count; i++) peak = this.advance(dt / count);
     return peak;
@@ -45,6 +46,7 @@ class Surface {
     const f=this.flow, s=f.stride, h=this.height, v=this.speed;
     let peak=0;
     this.time+=dt;
+    const invCellArea=this.refinement*this.refinement;
     const damping=Math.exp(-.072*dt);
     // Transport both fields first. The wave stencil must use neighbours
     // from this same transported state, including during fast sweeps.
@@ -68,9 +70,9 @@ class Surface {
         const carried=ch[k];
         const curvature=ch[left]+ch[right]+ch[top]+ch[bottom]-4*carried;
         const lapV=cv[left]+cv[right]+cv[top]+cv[bottom]-4*cv[k];
-        let force=.46*curvature+.085*lapV-.018*carried;
-        if(f.mode==="inflow" && i<=3) {
-          force+=.014*Math.sin(.09*this.time+.12*j)*Math.sin(Math.PI*j/f.ny);
+        let force=invCellArea*(.46*curvature+.055*lapV)-.018*carried;
+        if(f.mode==="inflow" && i<=3*this.refinement) {
+          force+=.014*Math.sin(.09*this.time+.12*j/this.refinement)*Math.sin(Math.PI*j/f.ny);
         }
         const speed=damping*(cv[k]+dt*force);
         this.nextSpeed[k]=speed;
@@ -97,17 +99,32 @@ function panel(rx, ry, rz, normal, horizontal, vertical, w, h, softness) {
   return edge*edge*(3-2*edge);
 }
 
-function reflectedStudio(slopeX, slopeY) {
+function reflectedLight(slopeX, slopeY, grazing) {
   const length = Math.hypot(slopeX,slopeY,1);
   const nx=slopeX/length, ny=slopeY/length, nz=1/length;
   const vy=-.30, vz=Math.sqrt(1-vy*vy);
   const cosine=clamp(ny*vy+nz*vz,0,1);
   const rx=2*cosine*nx, ry=2*cosine*ny-vy, rz=2*cosine*nz-vz;
-  const sky=clamp((rz+.12)/1.12,0,1);
-  const ceiling=panel(rx,ry,rz,[-.48,.36,.80],[.86,0,.51],[.18,.93,-.31],.85,.30,.32);
-  const side=panel(rx,ry,rz,[.82,-.30,.49],[.51,0,-.86],[.26,.95,.15],.26,.88,.25);
-  const card=panel(rx,ry,rz,[.14,-.46,.88],[.99,0,-.16],[.07,.89,.45],.79,.24,.30);
-  const environment=(.042+.34*sky*sky)*(1-.83*card)+2.4*ceiling+1.12*side;
+  let environment;
+  if (grazing) {
+    // A tall grazing strip crosses the left side of the tray. A diffuse
+    // clerestory lights the right, separated by a dark band of the room.
+    const stripAxis=.90*rx+.39*ry+.16*rz+.39;
+    const stripLength=clamp(.70+.30*rz+.14*ry,0,1);
+    const edge=Math.exp(-((stripAxis/.042)**2));
+    const spill=Math.exp(-((stripAxis/.23)**2));
+    const dome=Math.max(0,.62*rx+.34*ry+.71*rz);
+    const horizon=ry-.34*rx+.16*rz;
+    const room=.022+.16*Math.max(0,rz)+.12*(1+ry);
+    const flag=.90*Math.exp(-((horizon/.46)**2));
+    environment=(room+2.25*dome**6)*(1-flag)+stripLength*(5.2*edge+.60*spill);
+  } else {
+    const sky=clamp((rz+.12)/1.12,0,1);
+    const ceiling=panel(rx,ry,rz,[-.48,.36,.80],[.86,0,.51],[.18,.93,-.31],.85,.30,.32);
+    const side=panel(rx,ry,rz,[.82,-.30,.49],[.51,0,-.86],[.26,.95,.15],.26,.88,.25);
+    const card=panel(rx,ry,rz,[.14,-.46,.88],[.99,0,-.16],[.07,.89,.45],.79,.24,.30);
+    environment=(.042+.34*sky*sky)*(1-.83*card)+2.4*ceiling+1.12*side;
+  }
   const fresnel=.78+.22*(1-cosine)**5;
   const luminance=environment*fresnel;
   const tone=luminance/(luminance+.56);
@@ -119,7 +136,7 @@ function reflectedStudio(slopeX, slopeY) {
 class Mercury {
   constructor(canvas, flow, width, height) {
     this.ctx=canvas.getContext("2d",{alpha:false});
-    const density=Math.min(1.5,window.devicePixelRatio||1);
+    const density=Math.min(2,window.devicePixelRatio||1);
     this.w=canvas.width=Math.round(width*density);
     this.h=canvas.height=Math.round(height*density);
     this.image=this.ctx.createImageData(this.w,this.h);
@@ -128,8 +145,8 @@ class Mercury {
     for(let j=0;j<256;j++) {
       for(let i=0;i<256;i++) {
         const x=(i-127.5)/85, y=(j-127.5)/85;
-        if (LIGHTING === "studio") {
-          this.lightMap[i+256*j] = Math.round(reflectedStudio(x,y));
+        if (LIGHTING !== "classic") {
+          this.lightMap[i+256*j] = Math.round(reflectedLight(x,y,LIGHTING==="grazing"));
           continue;
         }
         const horizon=y-.14*x+.08*x*x;
@@ -143,7 +160,11 @@ class Mercury {
     const count=this.w*this.h;
     this.baseX=new Float32Array(count);
     this.baseY=new Float32Array(count);
-    this.cell=new Uint16Array(count);
+    this.cellX=new Uint16Array(this.w);
+    this.cellY=new Uint16Array(this.h);
+    this.endX=new Uint16Array(flow.nx+1);
+    this.changed=new Uint8Array(flow.u.length);
+    this.firstFrame=true;
     this.fx=new Float32Array(this.w);
     this.fy=new Float32Array(this.h);
     // Static meniscus around the shallow tray, including its rounded corners.
@@ -151,7 +172,9 @@ class Mercury {
       for(let i=0;i<this.w;i++) {
         const k=i+j*this.w, x=(i+.5)/this.w, y=(j+.5)/this.h;
         const gx=clamp(.5+x*flow.nx,1,flow.nx-.001), gy=clamp(.5+y*flow.ny,1,flow.ny-.001);
-        this.cell[k]=Math.floor(gx)+Math.floor(gy)*flow.stride;
+        this.cellX[i]=Math.floor(gx);
+        this.cellY[j]=Math.floor(gy);
+        this.endX[this.cellX[i]]=i+1;
         this.fx[i]=gx-Math.floor(gx); this.fy[j]=gy-Math.floor(gy);
         const a=2*x-1, b=2*y-1;
         const rimX=Math.sign(a)*Math.pow(Math.abs(a),16)*.78;
@@ -166,31 +189,52 @@ class Mercury {
 
   draw(flow,surface) {
     const s=flow.stride, h=surface.height, sx=this.normalX, sy=this.normalY;
+    const gradientScale=83*surface.refinement;
     for(let j=1;j<=flow.ny;j++) {
       for(let i=1;i<=flow.nx;i++) {
         const k=i+j*s;
-        sx[k]=83*(h[i===1?k:k-1]-h[i===flow.nx?k:k+1]);
-        sy[k]=83*(h[j===1?k:k-s]-h[j===flow.ny?k:k+s]);
-      }
-    }
-    for(let j=0;j<this.h;j++) {
-      const b=this.fy[j];
-      for(let i=0;i<this.w;i++) {
-        const k=i+j*this.w, p=this.cell[k], q=p+s, a=this.fx[i];
-        const w0=(1-a)*(1-b), w1=a*(1-b), w2=(1-a)*b, w3=a*b;
-        const ex=clamp(this.baseX[k]+sx[p]*w0+sx[p+1]*w1+sx[q]*w2+sx[q+1]*w3,0,255);
-        const ey=clamp(this.baseY[k]+sy[p]*w0+sy[p+1]*w1+sy[q]*w2+sy[q+1]*w3,0,255);
-        const ix=Math.floor(ex), iy=Math.floor(ey), lut=ix+256*iy;
-        let value=this.lightMap[lut];
-        if (LIGHTING==="studio") {
-          const fx=ex-ix, fy=ey-iy, next=ix<255 ? 1 : 0, row=iy<255 ? 256 : 0;
-          const low=value+fx*(this.lightMap[lut+next]-value);
-          const high=this.lightMap[lut+row]+fx*(this.lightMap[lut+row+next]-this.lightMap[lut+row]);
-          value=Math.round(low+fy*(high-low));
+        let x=gradientScale*(h[i===1?k:k-1]-h[i===flow.nx?k:k+1]);
+        let y=gradientScale*(h[j===1?k:k-s]-h[j===flow.ny?k:k+s]);
+        // Quantize well below a lighting-map texel, so decayed ripples stop
+        // causing full Retina scanlines to be redrawn for invisible changes.
+        if (LIGHTING==="grazing") {
+          x=Math.round(x*32)/32;
+          y=Math.round(y*32)/32;
         }
-        this.pixels[k]=0xff000000 | value*0x010101;
+        this.changed[k]=this.firstFrame || x!==sx[k] || y!==sy[k];
+        sx[k]=x; sy[k]=y;
       }
     }
-    this.ctx.putImageData(this.image,0,0);
+    let left=this.w, right=0, top=this.h, bottom=0;
+    for(let j=0;j<this.h;j++) {
+      const b=this.fy[j], row=this.cellY[j]*s;
+      for(let i=0;i<this.w;) {
+        const col=this.cellX[i], end=this.endX[col], p=col+row, q=p+s;
+        if (this.changed[p] || this.changed[p+1] || this.changed[q] || this.changed[q+1]) {
+          left=Math.min(left,i); right=Math.max(right,end);
+          top=Math.min(top,j); bottom=j+1;
+          const x0=sx[p]+b*(sx[q]-sx[p]), y0=sy[p]+b*(sy[q]-sy[p]);
+          const dx=sx[p+1]+b*(sx[q+1]-sx[p+1])-x0;
+          const dy=sy[p+1]+b*(sy[q+1]-sy[p+1])-y0;
+          for(let t=i;t<end;t++) {
+            const k=t+j*this.w, a=this.fx[t];
+            const ex=clamp(this.baseX[k]+x0+a*dx,0,255);
+            const ey=clamp(this.baseY[k]+y0+a*dy,0,255);
+            const ix=Math.floor(ex), iy=Math.floor(ey), lut=ix+256*iy;
+            let value=this.lightMap[lut];
+            if (LIGHTING!=="classic") {
+              const fx=ex-ix, fy=ey-iy, next=ix<255 ? 1 : 0, below=iy<255 ? 256 : 0;
+              const low=value+fx*(this.lightMap[lut+next]-value);
+              const high=this.lightMap[lut+below]+fx*(this.lightMap[lut+below+next]-this.lightMap[lut+below]);
+              value=Math.round(low+fy*(high-low));
+            }
+            this.pixels[k]=0xff000000 | value*0x010101;
+          }
+        }
+        i=end;
+      }
+    }
+    if(right>left) this.ctx.putImageData(this.image,0,0,left,top,right-left,bottom-top);
+    this.firstFrame=false;
   }
 }

@@ -58,10 +58,11 @@ function resize() {
   if(!box.width || !box.height || (width===box.width && height===box.height && pixelRatio===dpr)) return;
   width=box.width; height=box.height; pixelRatio=dpr;
   hideObstacle();
-  const ny=clamp(Math.round(height/3),28,48);
+  const referenceRows=clamp(Math.round(height/3),28,48);
+  const ny=Math.round(referenceRows*1.5);
   fluid=new Fluid(Math.max(32,Math.round(width*ny/height)),ny,FLOW_MODE);
   fluid.radius=4.5*ny/height;
-  surface=new Surface(fluid);
+  surface=new Surface(fluid,ny/referenceRows);
   renderer=new Mercury(canvas,fluid,width,height);
   renderer.draw(fluid,surface);
   elapsedSinceStroke=0; lastFrame=0; awake=false;
