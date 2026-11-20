@@ -22,8 +22,8 @@ themeButton.addEventListener("click",()=>{
 
 const canvas=document.getElementById("flow");
 const ctx=canvas.getContext("2d",{alpha:false});
-let fluid, lines, width, height, pixelRatio;
-let activePointer=null, previousTime=0, debt=0, onScreen=true;
+let fluid, ink, width, height, pixelRatio;
+let activePointer=null, previousTime=0, onScreen=true;
 
 // Decode a precomputed, evolved state so that the first frame has a wake.
 // This snapshot only initializes the simulation. Every later step runs locally.
@@ -36,7 +36,7 @@ function unpack(text,scale) {
   }
   return values;
 }
-function warmStart(f, strands) {
+function warmStart(f, pigment) {
   const aspect=f.nx/f.ny;
   const state=WAKE_PRESETS.reduce((a,b)=>Math.abs(a.nx/a.ny-aspect)<Math.abs(b.nx/b.ny-aspect)?a:b);
   const original=new Fluid(state.nx,state.ny,"inflow");
@@ -50,126 +50,81 @@ function warmStart(f, strands) {
     }
   }
   f.boundaries(0,0);
-  const px=unpack(state.x,128), py=unpack(state.y,128);
-  for(let row=0;row<strands.rows;row++) {
-    for(let col=0;col<strands.cols;col++) {
-      const position=col*(state.cols-1)/(strands.cols-1), index=Math.floor(position);
-      const a=row*state.cols+(index+state.head)%state.cols;
-      const b=row*state.cols+(Math.min(index+1,state.cols-1)+state.head)%state.cols;
-      const fraction=position-index;
-      const k=row*strands.cols+col;
-      strands.positionsX[k]=1+(px[a]+fraction*(px[b]-px[a])-1)*horizontal;
-      strands.positionsY[k]=1+(py[a]+fraction*(py[b]-py[a])-1)*vertical;
+  const bytes = atob(state.dye);
+  const w = state.nx*state.scale, h = state.ny*state.scale;
+  for (let y=0; y<pigment.h; y++) {
+    const sy=clamp((y+.5)*h/pigment.h-.5,0,h-1.001);
+    const iy=Math.floor(sy), by=sy-iy;
+    for (let x=0; x<pigment.w; x++) {
+      const sx=clamp((x+.5)*w/pigment.w-.5,0,w-1.001);
+      const ix=Math.floor(sx), bx=sx-ix, p=iy*w+ix;
+      const top=(1-bx)*bytes.charCodeAt(p)+bx*bytes.charCodeAt(p+1);
+      const bottom=(1-bx)*bytes.charCodeAt(p+w)+bx*bytes.charCodeAt(p+w+1);
+      pigment.dye[x+y*pigment.w]=((1-by)*top+by*bottom)/255;
     }
   }
-  strands.tick=state.tick;
+  pigment.time=state.time;
+}
+
+// The simulation and its pigment are independent of display pixel density.
+// Only the final disk and the finished image are composited at display resolution.
+const inkCanvas = document.createElement("canvas");
+const inkContext = inkCanvas.getContext("2d", {alpha:false});
+let imageData, rgba, slowFrames=0, stirred=false;
+function configurePigmentCanvas() {
+  inkCanvas.width=ink.w; inkCanvas.height=ink.h;
+  imageData=inkContext.createImageData(ink.w,ink.h);
+  rgba=new Uint32Array(imageData.data.buffer);
 }
 
 function resize() {
   const rect=canvas.getBoundingClientRect();
   const dpr=Math.min(2,window.devicePixelRatio||1);
-  if (width===rect.width && height===rect.height && pixelRatio===dpr) return;
+  if (!rect.width || !rect.height || (width===rect.width && height===rect.height && pixelRatio===dpr)) return;
   width=rect.width; height=rect.height; pixelRatio=dpr;
-  canvas.width=Math.max(1,Math.round(width*dpr));
-  canvas.height=Math.max(1,Math.round(height*dpr));
-  const ny=clamp(Math.round(height/6.5),44,72);
-  const nx=Math.max(38,Math.round(ny*width/height));
-  if(!fluid || fluid.nx!==nx || fluid.ny!==ny) {
+  canvas.width=Math.round(width*dpr);
+  canvas.height=Math.round(height*dpr);
+  const ny=clamp(Math.round(height/6.2),32,48);
+  const nx=Math.max(32,Math.round(ny*width/height));
+  if(!fluid || nx!==fluid.nx || ny!==fluid.ny) {
     fluid=new Fluid(nx,ny,FLOW_MODE);
-    lines=new Filaments(fluid);
-    if(FLOW_MODE==="inflow") warmStart(fluid,lines);
-    debt=0;
+    ink=new Ink(fluid,4);
+    if(FLOW_MODE==="inflow") warmStart(fluid,ink);
+    configurePigmentCanvas();
+    stirred=false; slowFrames=0;
   }
   paint();
 }
 
-function hash(n) {
-  const s=Math.sin(129.87*n+19.27)*43758.5453;
-  return s-Math.floor(s);
-}
-function drawFilaments(light) {
-  const {rows,cols,head,positionsX:px,positionsY:py}=lines;
-  const sx=width/fluid.nx, sy=height/fluid.ny;
-  const maxDistance=(fluid.ny*.053)**2;
-  ctx.lineJoin="round"; ctx.lineCap="round";
-  for(let row=0;row<rows;row++) {
-    const t=(row+.5)/rows, variation=hash(row);
-    const core=Math.exp(-((t-.50)**2)/.040);
-    const lobe=.5+.5*Math.cos(51*t+.72*Math.sin(19*t));
-    const brightness=(.18+.82*core)*(.28+.72*lobe)*(.42+.58*variation);
-    const intensity=Math.round(light ? 211-166*brightness : 32+213*brightness);
-    ctx.strokeStyle='rgb('+intensity+' '+intensity+' '+intensity+')';
-    ctx.lineWidth=Math.max(.48,height*(.0015+.0042*hash(row+900)**3));
-    ctx.beginPath();
-    let lastX=0, lastY=0;
-    for(let n=0;n<cols;n++) {
-      const k=row*cols+(n+head)%cols;
-      const x=px[k], y=py[k];
-      if(x>fluid.nx+1.9) { lastX=0; continue; }
-      // Disconnected dye fades into the background as it stretches and exits.
-      if(!lastX || (x-lastX)**2+(y-lastY)**2>maxDistance) ctx.moveTo((x-1)*sx,(y-1)*sy);
-      else ctx.quadraticCurveTo((lastX-1)*sx,(lastY-1)*sy,((x+lastX)*.5-1)*sx,((y+lastY)*.5-1)*sy);
-      lastX=x; lastY=y;
-    }
-    ctx.stroke();
-  }
-}
-
-// A low-resolution tonal layer follows local rotation and speed. Interpolation
-// gives the dye a continuous body under the individual material filaments.
-const washCanvas=document.createElement("canvas");
-const wash=washCanvas.getContext("2d");
-let washImage;
-function drawWash(light) {
-  const {nx,ny,stride,u,v,inlet}=fluid;
-  if(washCanvas.width!==nx || washCanvas.height!==ny || !washImage) {
-    washCanvas.width=nx; washCanvas.height=ny;
-    washImage=wash.createImageData(nx,ny);
-  }
-  const pixels=washImage.data;
-  for(let j=1;j<=ny;j++) {
-    for(let i=1;i<=nx;i++) {
-      const k=i+j*stride;
-      const curl=(v[k+1]-v[k-1]-u[k+stride]+u[k-stride])*.5;
-      const shear=Math.min(1,Math.abs(curl)*5/inlet);
-      const ambient=FLOW_MODE==="inflow" ? inlet : 0;
-      const speed=Math.min(1,Math.hypot(u[k]-ambient,v[k])/inlet);
-      const tone=light ? 231-19*speed-34*shear : 24+15*speed+34*shear;
-      const p=4*((j-1)*nx+i-1);
-      pixels[p]=pixels[p+1]=pixels[p+2]=tone; pixels[p+3]=255;
-    }
-  }
-  wash.putImageData(washImage,0,0);
-  ctx.drawImage(washCanvas,0,0,width,height);
-}
-function drawCylinder(light) {
-  const x=(fluid.x-1)*width/fluid.nx, y=(fluid.y-1)*height/fluid.ny;
-  const r=fluid.radius*height/fluid.ny;
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
-  const metal=ctx.createLinearGradient(x-r,y-r,x+r*.8,y+r);
-  metal.addColorStop(0,light?"#d3d3d3":"#999");
-  metal.addColorStop(.24,light?"#aaa":"#676767");
-  metal.addColorStop(.65,light?"#747474":"#404040");
-  metal.addColorStop(1,light?"#5a5a5a":"#313131");
-  ctx.fillStyle=metal; ctx.fill();
-  ctx.lineWidth=1.15; ctx.strokeStyle=light?"#585858":"#aaa"; ctx.stroke();
-  ctx.restore();
-}
 function paint() {
   if(!fluid) return;
   const light=isLight();
+  const {w,h,dye}=ink;
+  // Directional light on the concentration gradient brings out thin folds.
+  // The broad tone and fine highlights both come from the same advected field.
+  for (let y=0; y<h; y++) {
+    const above=y===0 ? 0 : -w, below=y===h-1 ? 0 : w;
+    for (let x=0; x<w; x++) {
+      const k=x+y*w;
+      const gx=dye[x===w-1?k:k+1]-dye[x===0?k:k-1];
+      const gy=dye[k+below]-dye[k+above];
+      const slope=-.46*gx-.89*gy;
+      const reflection=100*slope/(.19+Math.abs(slope));
+      const c=dye[k];
+      const tone=light ? 243-132*c-46*c*c+reflection*.62 : 17+78*c+162*c*c+reflection*.94;
+      const value=clamp(Math.round(tone),0,255);
+      rgba[k]=0xff000000 | value*0x010101;
+    }
+  }
+  inkContext.putImageData(imageData,0,0);
   ctx.setTransform(canvas.width/width,0,0,canvas.height/height,0,0);
-  drawWash(light);
-  drawFilaments(light);
-  // Soft extinction of dye as it travels downstream.
-  const fade=ctx.createLinearGradient(0,0,width,0);
-  const base=light?"231 231 231":"24 24 24";
-  fade.addColorStop(0,'rgb('+base+' / .25)');
-  fade.addColorStop(.33,'rgb('+base+' / 0)');
-  fade.addColorStop(1,'rgb('+base+' / .27)');
-  ctx.fillStyle=fade; ctx.fillRect(0,0,width,height);
-  drawCylinder(light);
+  ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(inkCanvas,0,0,width,height);
+  const x=(fluid.x-1)*width/fluid.nx, y=(fluid.y-1)*height/fluid.ny;
+  ctx.beginPath();
+  ctx.arc(x,y,fluid.radius*height/fluid.ny,0,Math.PI*2);
+  ctx.fillStyle=light?"#eee":"#151515"; ctx.fill();
+  ctx.strokeStyle=light?"#666":"#a0a0a0"; ctx.lineWidth=.75; ctx.stroke();
 }
 
 function setTarget(x,y) {
@@ -201,15 +156,26 @@ canvas.addEventListener("keydown",event=>{
 });
 
 function frame(time) {
-  // Fixed steps and bounded catch-up keep the CFL number independent of frame stalls.
-  if(onScreen && !document.hidden) {
-    debt+=Math.min((time-(previousTime||time))*0.030,2);
-    let advanced=false;
-    while(debt>=1) {
-      fluid.step(1); lines.step(1); debt-=1; advanced=true;
+  const moving = fluid.x!==fluid.targetX || fluid.y!==fluid.targetY;
+  if(moving) stirred=true;
+  if(onScreen && !document.hidden && (FLOW_MODE==="inflow" || stirred)) {
+    const started=performance.now();
+    const dt = clamp(previousTime ? (time-previousTime)*.035 : .5, .06, 1.25);
+    // One full interaction update per display frame, including high-refresh displays.
+    fluid.step(dt);
+    ink.step(fluid,dt);
+    paint();
+    // If the rendering budget is repeatedly exceeded on this device, retain
+    // the evolved dye and lower only its sampling density, keeping input responsive.
+    if(ink.scale===4) {
+      slowFrames=Math.max(0,slowFrames+(performance.now()-started>15 ? 1 : -1));
+      if(slowFrames>=24) {
+        ink=ink.reduceResolution(fluid);
+        configurePigmentCanvas();
+        slowFrames=0;
+      }
     }
-    if(advanced) paint();
-  } else { debt=0; }
+  }
   previousTime=time;
   requestAnimationFrame(frame);
 }

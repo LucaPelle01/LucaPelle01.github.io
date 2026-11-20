@@ -9,14 +9,15 @@
   <link rel="stylesheet" href="./style.css">
   <script defer src="./config.js"></script>
   <script defer src="./fluid.js"></script>
+  <script defer src="./ink.js"></script>
   <script defer src="./wake.js"></script>
   <script defer src="./app.js"></script>
 </head>
 <body>
   <main>
     <header>
-      <h1>Luca Pellegrini</h1>
-      <p id="work">Politecnico di Milano</p>
+      <h1><em>Luca</em> Pellegrini</h1>
+      <p id="affiliation">[Affiliazione attuale]</p>
       <nav aria-label="Contatti">
         <a id="email" aria-label="Email" title="Email"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg></a>
         <a id="github" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.55.1.76-.24.76-.54v-2.08c-3.09.67-3.74-1.31-3.74-1.31-.5-1.28-1.23-1.62-1.23-1.62-1.01-.69.08-.67.08-.67 1.12.08 1.7 1.14 1.7 1.14.99 1.7 2.6 1.21 3.23.93.1-.72.39-1.21.71-1.48-2.47-.28-5.06-1.24-5.06-5.49 0-1.21.43-2.2 1.14-2.98-.11-.28-.49-1.41.11-2.94 0 0 .93-.30 3.05 1.14a10.56 10.56 0 0 1 5.55 0c2.12-1.44 3.05-1.14 3.05-1.14.6 1.53.22 2.66.11 2.94.71.78 1.14 1.77 1.14 2.98 0 4.26-2.60 5.2-5.08 5.48.4.35.75 1.02.75 2.06v3.04c0 .30.20.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg></a>
@@ -28,7 +29,7 @@
       </button>
     </header>
     <div class="frame">
-      <canvas id="flow" tabindex="0" aria-label="></canvas>
+      <canvas id="flow" tabindex="0" aria-label="Simulazione di un fluido. Muovi il cilindro con il cursore, trascinalo con un dito o usa i tasti freccia.">Simulazione di un fluido attorno a un cilindro mobile.</canvas>
     </div>
     <footer lang="en">
       <p aria-label="down for maintenance...">down for maintenance<span class="dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></p>

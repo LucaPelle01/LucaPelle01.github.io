@@ -11,8 +11,8 @@ class Fluid {
     const size = this.stride * (ny + 3);
     for (const name of ["u", "v", "nextU", "nextV", "tmpU", "tmpV", "weight"]) this[name] = new Float32Array(size);
     this.open = new Uint8Array(size);
-    this.radius = ny * .083;
-    this.x = 1 + nx * .268;
+    this.radius = ny * .058;
+    this.x = 1 + nx * .28;
     this.y = 1 + ny * .50;
     this.targetX = this.x;
     this.targetY = this.y;
@@ -70,6 +70,35 @@ class Fluid {
       Math.min(left,right,up,down,center),Math.max(left,right,up,down,center));
     return limited+dt*this.viscosity*(left+right+up+down-4*center);
   }
+  moveObstacle(dt) {
+    const dx = this.targetX - this.x, dy = this.targetY - this.y;
+    const length = Math.hypot(dx,dy);
+    // Bound the impulse, never the pointer position. Long strokes affect the
+    // entire swept disk even if the device delivered only two pointer samples.
+    const scale = Math.min(1/dt, 2.7/Math.max(length,1e-6));
+    const vx = dx*scale, vy = dy*scale;
+    if (length > .5*this.radius) {
+      const r = this.radius;
+      const left = Math.max(1,Math.floor(Math.min(this.x,this.targetX)-r));
+      const right = Math.min(this.nx,Math.ceil(Math.max(this.x,this.targetX)+r));
+      const top = Math.max(1,Math.floor(Math.min(this.y,this.targetY)-r));
+      const bottom = Math.min(this.ny,Math.ceil(Math.max(this.y,this.targetY)+r));
+      for (let j=top; j<=bottom; j++) {
+        for (let i=left; i<=right; i++) {
+          const rx=i+.5-this.x, ry=j+.5-this.y;
+          const t=clamp((rx*dx+ry*dy)/(length*length),0,1);
+          const distance2=(rx-t*dx)**2+(ry-t*dy)**2;
+          const mix=.82*Math.max(0,1-distance2/(r*r));
+          const k=i+j*this.stride;
+          this.u[k]+=(vx-this.u[k])*mix;
+          this.v[k]+=(vy-this.v[k])*mix;
+        }
+      }
+    }
+    this.x=this.targetX;
+    this.y=this.targetY;
+    this.boundaries(vx,vy);
+  }
   step(dt=1) {
     const {nx,ny,stride:s,u,v,nextU,nextV,open,weight} = this;
     // Explicit viscosity, semi-Lagrangian transport and a bounded
@@ -95,16 +124,12 @@ class Fluid {
     }
     this.u=this.tmpU; this.v=this.tmpV; this.tmpU=u; this.tmpV=v;
 
-    const dx=this.targetX-this.x, dy=this.targetY-this.y;
-    const blend=Math.min(1-Math.exp(-.13*dt), 1.1*dt/Math.max(.0001,Math.hypot(dx,dy)));
-    const bx=dx*blend, by=dy*blend;
-    this.x+=bx; this.y+=by;
-    this.boundaries(bx/dt,by/dt);
+    this.moveObstacle(dt);
 
     // In-place SOR pressure projection. Each local pressure increment cancels
     // divergence by correcting only faces shared with another fluid cell.
     const U=this.u, V=this.v;
-    for (let iteration=0; iteration<24; iteration++) {
+    for (let iteration=0; iteration<20; iteration++) {
       for (let j=1; j<=ny; j++) {
         for (let k=1+j*s, end=k+nx; k<end; k++) {
           const p=weight[k]*(U[k+1]-U[k]+V[k+s]-V[k]);
@@ -116,66 +141,3 @@ class Fluid {
   }
 }
 
-// Each column of markers is released together. Connecting successive releases
-// from the same inlet port gives a material streakline, including inside folds.
-class Filaments {
-  constructor(fluid) {
-    this.f=fluid;
-    this.rows=136;
-    this.period=2;
-    this.cols=Math.ceil(fluid.nx/(this.period*fluid.inlet)*1.6)+8;
-    this.positionsX=new Float32Array(this.rows*this.cols);
-    this.positionsY=new Float32Array(this.rows*this.cols);
-    this.head=0;
-    this.clock=0;
-    this.tick=0;
-    for(let row=0;row<this.rows;row++) {
-      for(let col=0;col<this.cols;col++) {
-        const k=row*this.cols+col;
-        const x=1+fluid.nx*col/(this.cols-1);
-        let y=this.port(row,-col*2);
-        if(fluid.mode==="still") y+=.012*fluid.ny*Math.sin(4*x/fluid.ny+row*.035);
-        const dx=x-fluid.x, dy=y-fluid.y, distance=Math.hypot(dx,dy);
-        const inside=distance>0 && distance<fluid.radius;
-        this.positionsX[k]=inside ? fluid.x+dx*fluid.radius/distance : x;
-        this.positionsY[k]=clamp(inside ? fluid.y+dy*fluid.radius/distance : y,1,fluid.ny+1);
-      }
-    }
-  }
-  port(row,time) {
-    const y=(row+.5)/this.rows;
-    // A fine comb of dye ports. Only the injected dye position varies.
-    return 1+this.f.ny*(y+.008*Math.sin(13*y+.012*time)+.004*Math.sin(29*y-.018*time));
-  }
-  step(dt) {
-    const f=this.f;
-    this.clock+=dt; this.tick+=dt;
-    const emit=this.clock>=this.period && f.mode==="inflow";
-    if(emit) {
-      this.clock%=this.period;
-      this.head=(this.head+this.cols-1)%this.cols;
-    }
-    const px=this.positionsX, py=this.positionsY;
-    for(let k=0;k<px.length;k++) {
-      let x=px[k], y=py[k];
-      if(x>f.nx+2) continue;
-      const vx=f.sample(f.u,x,y-.5), vy=f.sample(f.v,x-.5,y);
-      const mx=x+.5*dt*vx, my=y+.5*dt*vy;
-      x+=dt*f.sample(f.u,mx,my-.5);
-      y+=dt*f.sample(f.v,mx-.5,my);
-      const dx=x-f.x, dy=y-f.y, distance=Math.hypot(dx,dy);
-      if(distance<f.radius && distance>0) {
-        x=f.x+dx*f.radius/distance;
-        y=f.y+dy*f.radius/distance;
-      }
-      px[k]=Math.max(1,x);
-      py[k]=clamp(y,1,f.ny+1);
-    }
-    if(emit) {
-      for(let row=0;row<this.rows;row++) {
-        const k=row*this.cols+this.head;
-        px[k]=1; py[k]=this.port(row,this.tick);
-      }
-    }
-  }
-}
