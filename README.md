@@ -15,3 +15,5 @@ Con il mouse, il disco è il cursore di sistema con il centro sul punto di inter
 ## Superficie
 
 `fluid.js` integra il campo di velocità su una griglia MAC con advezione, diffusione viscosa e proiezione della pressione. `surface.js` calcola un campo di altezza smorzato, trasportato dalla velocità del fluido. Il passaggio del cilindro deforma la superficie. L’effetto mercurio deriva dalla luce riflessa sulle sue pendenze e dalla curvatura ai bordi della vaschetta. La modalità in quiete sospende il calcolo quando le perturbazioni si sono dissipate.
+
+Con `LIGHTING = "studio"` in `config.js`, il metallo riflette due pannelli luminosi e un pannello scuro. Imposta `LIGHTING = "classic"` per ripristinare soltanto la luce precedente. Le onde si attenuano gradualmente e si riflettono sui quattro bordi della superficie.

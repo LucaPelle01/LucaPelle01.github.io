@@ -8,3 +8,6 @@ const PROFILE = {
 
 // "inflow" = corrente da sinistra. "still" = fluido inizialmente in quiete.
 const FLOW_MODE = "still";
+
+// Riflessi della superficie: "studio" o illuminazione precedente "classic".
+const LIGHTING = "studio";
