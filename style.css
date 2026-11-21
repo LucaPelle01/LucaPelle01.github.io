@@ -1,16 +1,14 @@
 @font-face {
-  font-family: "MonoLisa";
-  src: local("MonoLisa Regular"), local("MonoLisa-Regular"),
-       url("./fonts/MonoLisa-Regular.woff2") format("woff2");
+  font-family: "JetBrains Mono";
+  src: url("./fonts/JetBrainsMono-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "MonoLisa";
-  src: local("MonoLisa Bold"), local("MonoLisa-Bold"),
-       url("./fonts/MonoLisa-Bold.woff2") format("woff2");
+  font-family: "JetBrains Mono";
+  src: url("./fonts/JetBrainsMono-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -23,7 +21,7 @@
   --text-size: 13px;
   --social-icon-size: 22px;
   --theme-icon-size: 17px;
-  font-family: "MonoLisa", "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
 }
 :root[data-theme="light"] {
   color-scheme: light;

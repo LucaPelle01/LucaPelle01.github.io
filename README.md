@@ -1,6 +1,6 @@
 # Luca Pellegrini
 
-Apri `index.html` per provare il sito. Per pubblicarlo, copia i file nella radice del repository `<username>.github.io` e seleziona quella cartella come sorgente di GitHub Pages. Tutte le risorse sono incluse.
+Apri `index.html` per provare il sito. Per pubblicarlo, copia i file nella radice del repository `<username>.github.io` e seleziona quella cartella come sorgente di GitHub Pages.
 
 ## Personalizzazione
 
@@ -9,6 +9,10 @@ In `config.js`, modifica i campi `PROFILE.affiliation`, `PROFILE.email`, `PROFIL
 Imposta `FLOW_MODE` su `"still"` per la quiete iniziale (predefinita) o su `"inflow"` per la corrente da sinistra. Ricarica la pagina dopo una modifica.
 
 Il pulsante in alto a destra alterna i temi scuro (luna), panna (sole) e Blue Heritage (Saturno). L’icona indica il tema corrente. La superficie passa dall’argento al metallo champagne e poi al blu acciaio. Il browser ricorda la scelta.
+
+## Font
+
+Il sito include JetBrains Mono in formato WOFF2, nei pesi Regular e Bold. I file e la licenza sono nella cartella `fonts/`.
 
 ## Interazione
 
