@@ -37,7 +37,7 @@
 body { margin: 0; font-size: var(--text-size); line-height: 1.6; font-style: normal; background: var(--page); color: var(--ink); }
 main { width: min(800px, calc(100% - 84px)); margin: clamp(76px, 12vh, 128px) auto 52px; }
 header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; }
-h1 { margin: 0; color: #c56912; font-size: clamp(27px, 3.2vw, 38px); line-height: 1; font-weight: 550; letter-spacing: 0em; transform: translate(-3px, -3px); }
+h1 { margin: 0; color: #c56912; font-size: clamp(24px, 3.1vw, 35px); line-height: 1; font-weight: 550; letter-spacing: 0em; transform: translate(-3px, -3px); }
 #affiliation, .collaboration { grid-column: 1 / -1; margin: 0; color: var(--muted); overflow-wrap: anywhere; }
 #affiliation { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
 .collaboration { margin-top: 4px; }
